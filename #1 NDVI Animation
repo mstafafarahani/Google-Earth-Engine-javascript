@@ -1,0 +1,192 @@
+//Youtube.com/@GEEmap
+
+var geometry = 
+    /* color: #98ff00 */
+    /* shown: false */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[-130.01089582440719, 49.86672328576647],
+          [-130.01089582440719, 24.72744777771546],
+          [-57.67691144940718, 24.72744777771546],
+          [-57.67691144940718, 49.86672328576647]]], null, false)
+          
+          
+          
+
+
+//1. Set Map View 
+//This line centers the map on the geometry object with a zoom level of 12.
+//This ensures the area of interest is clearly visible.
+Map.centerObject(geometry, 12)
+
+
+
+
+
+//Adds the geometry layer to the map so users can see the outline or boundaries of the target area.
+Map.addLayer(geometry,{},'area of interest',false)
+
+
+
+
+
+
+//2. Import Required Packages
+//Imports a package called text from the specified repository.
+//This package is used later for drawing text on images.
+var text = require('users/gena/packages:text')
+
+
+
+
+
+//3. Load Image Collection
+//Loads the MODIS NDVI (Normalized Difference Vegetation Index) image collection.
+//Only the NDVI band is selected, as this is the focus for analysis.
+var col = ee.ImageCollection('MODIS/061/MOD13Q1').select('NDVI');
+
+
+
+
+
+
+
+//4. Apply Mask for the USA or canada or country of your interest
+var mask = ee.FeatureCollection('USDOS/LSIB_SIMPLE/2017').filter(ee.Filter.eq('country_na', 'United States'))
+
+
+
+
+
+
+//5. Add Day of Year (DOY) Property
+//For each image in the collection, calculates the Day of Year (DOY) based on the image’s timestamp (system:time_start).
+//Adds the calculated DOY as a property to each image in the collection.
+var col = col.map(function(img) {
+  var doy = ee.Date(img.get('system:time_start')).getRelative('day', 'year');
+  return img.set('doy', doy)
+})
+
+
+
+
+
+
+//6. Create a Distinct DOY Collection
+//Filters the image collection to only include images from January 1, 2020, to January 1, 2023.
+//This serves as the reference collection for matching DOY values.
+var distinctDOY = col.filterDate('2020-01-01', '2023-01-01')
+
+
+
+
+
+//7. Define Join and Filter
+//Creates a filter that matches images based on the doy property.
+var filter = ee.Filter.equals({ leftField: 'doy', rightField: 'doy' })
+
+
+
+
+
+//Creates a join that stores matching images from the original collection as a property called doy_matches.
+var join = ee.Join.saveAll('doy_matches')
+
+
+
+
+//Applies the join, combining images with matching DOY values.
+//Converts the resulting feature collection back into an image collection.
+var joinCol = ee.ImageCollection(join.apply(distinctDOY, col, filter))
+
+
+
+
+
+//8. Reduce Matching Images
+//For each image, retrieves the matching DOY images (doy_matches).
+//Reduces these images using the median reducer, resulting in a single composite image for each DOY.
+//Preserves metadata like system:time_start.
+var comp = joinCol.map(function(img) {
+  var doyCol = ee.ImageCollection.fromImages(img.get('doy_matches'))
+  return doyCol.reduce(ee.Reducer.median()).copyProperties(img, ['system:time_start'])
+})
+
+
+
+
+
+//9. Define Visualization Parameters
+//Specifies the visualization parameters for the NDVI data.
+//The palette defines colors representing different NDVI ranges.
+var visParams = {
+  min:0.0,
+  max:9000.0,
+  palette: ['ffffff', 'ce7e45', 'df923d', 'f1b555', 'fcd163', '99b718', '74a901', '66a000', '529400', 
+  '3e8601', '207401', '056201', '004c00', '023b01', '012e01', '011d01', '011301']
+}
+
+
+
+
+//10. Draw Text on the Images
+//Determines the position for drawing text, relative to the geometry object.
+var pt = text.getLocation(geometry, 'right', '10%', '25%')
+
+//For each composite image:
+//Adds a label showing the image’s system:index.
+//Applies the visParams visualization settings.
+//Clips the image to the mask (USA boundary).
+//Blends the label with the image.
+var rgbVis = comp.map(function(img) {
+  var scale = 1500
+  var textVis = { fontSize: 16, textColor: 'ffffff', outlineColor: '000000', outlineWidth: 3, outlineOpacity: 1 }
+  var label = text.draw(img.get('system:index'), pt, scale, textVis)
+  return img.visualize(visParams).clip(mask).blend(label)
+})
+
+
+
+
+//11. Create GIF Parameters
+//Defines parameters for the GIF animation:
+//region: The area to visualize.
+//dimensions: Resolution of the GIF.
+//framesPerSecond: Speed of the animation.
+//format: Output format is a GIF.
+var gifParams = {
+  'region': geometry,
+  'dimensions': 600,
+  'crs': 'EPSG:3857',
+  'framesPerSecond': 0.9,
+  'format': 'gif'
+}
+
+
+
+//12. Generate and Display GIF
+//Generates the URL for the GIF animation and prints it to the console.
+//Displays a preview of the GIF in the Earth Engine interface.
+print(rgbVis.getVideoThumbURL(gifParams))
+print(ui.Thumbnail(rgbVis, gifParams));
+
+
+/*Conclusion:
+This script creates a composite visualization of NDVI data for the USA, labels each image, 
+and generates a GIF showing temporal changes.
+The explanation ensures that your audience understands each step and its purpose.*/
+
+
+
+
+
+
+
+
+
+
+
