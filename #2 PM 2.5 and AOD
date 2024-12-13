@@ -1,0 +1,138 @@
+//vedio and code is in my YouTube channel YouTube.com/@Geemap   plz subscribe my channel
+var geometry = /* color: #98ff00 */ee.Geometry.Point([-115.14909612755002, 36.16300362291966]);
+
+
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+/*
+var province = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry)
+Map.addLayer(province)
+
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry)
+Map.addLayer(country)
+
+*/
+
+
+
+//1. Defining Geometry
+
+/*In this line, a point geometry is defined using Google Earth Engine's (GEE) ee.Geometry.Point method.
+The point is defined by its geographic coordinates: longitude (-115.05575022468985) and latitude (36.39281611345376). 
+This geometry will be used to filter data and specify a region of interest (ROI) for analysis.*/
+
+
+
+//2. Define Time Range
+var dStart = ee.Date('2022-01-01')
+var dEnd = ee.Date('2023-01-01')
+/*Here, the script specifies a time range for data filtering:
+dStart: The start date of the time range, January 1, 2022.
+dEnd: The end date, January 1, 2023. These dates are used to filter the data based on
+the time period you are interested in.*/
+
+//3. Filter Dataset by Time and Location
+var dataset = ee.ImageCollection('MODIS/006/MCD19A2_GRANULES')
+  .filterDate(dStart, dEnd)
+  .filter(ee.Filter.bounds(city))
+  .select('Optical_Depth_047')
+/*This code performs multiple actions:
+
+It loads an ImageCollection from MODIS satellite data (MODIS/006/MCD19A2_GRANULES), which provides aerosol optical depth (AOD) information.
+The dataset is then filtered by the defined time range (dStart to dEnd).
+It is also filtered by the specified geographic region (geometry), ensuring the data corresponds to the location of interest.
+Finally, the script selects the Optical_Depth_047 band, which represents aerosol optical depth at 0.47 microns (a key indicator of air pollution).*/
+
+
+
+
+//4. Apply Scale Factors to Data
+function applyScaleFactors(image){
+  var Depth_047Bands = image.select('Optical_Depth_047').multiply(0.001);
+  return image.addBands(Depth_047Bands, null, true);
+}
+/*This function applies a scaling factor to the Optical_Depth_047 band. The value of aerosol optical depth (AOD) is typically in a range that needs to be 
+scaled down by multiplying it by 0.001 to convert it to a more usable scale. The function adds the scaled AOD as a new band to the image.*/
+
+
+
+
+//5. Apply Scaling Function to Dataset
+var collection1 = dataset.map(applyScaleFactors);
+var AOD_img = collection1.mosaic().clip(city)
+/*Here, the scaling function applyScaleFactors is applied to each image in the ImageCollection using .map(). 
+The .mosaic() method combines all images into a single image, and 
+.clip(geometry) clips the result to the area defined by the geometry (i.e., the region of interest).*/
+
+
+//6. Convert AOD to PM2.5
+function transform_to_pm25(image){
+  var tpm25 = image.select('Optical_Depth_047').multiply(0.001).multiply(23.89).add(5.18);
+  return image.addBands(tpm25, null, true);
+}
+/*This function transforms the AOD (Aerosol Optical Depth) into PM2.5 (particulate matter with a diameter of 2.5 micrometers or smaller) 
+using a known empirical formula:
+PM2.5 = 23.89 * AOD + 5.18 The AOD is first scaled by 0.001 (as before), then converted to PM2.5 by applying the formula. 
+The resulting PM2.5 values are added as a new band to the image.*/
+
+
+//7. Apply PM2.5 Transformation
+var collection2 = dataset.map(transform_to_pm25);
+var PM25_img = collection2.mean().clip(city)
+/*This step applies the PM2.5 transformation function to each image in the dataset. Like in the previous steps, 
+the images are mosaicked together and clipped to the defined region of interest.*/
+
+//8. Define Visualization Parameters for PM2.5
+var pm25_vis = {min: 5.873, max: 40.434, palette: ['yellow', 'orange', 'red', 'purple', 'black']};
+/*Here, visualization parameters are set for the PM2.5 image:
+min and max: These values define the range of PM2.5 values to display.
+Values below 5.873 will be shown as the minimum color, and values above 40.434 will be shown as the maximum color.
+
+palette: A color palette is defined to represent the different concentrations of PM2.5: from yellow (low concentrations) to black (high concentrations).*/
+
+//9. Create Time-Series Chart for PM2.5
+var chart = ui.Chart.image.series({
+  imageCollection: collection2,
+  region: city,
+  reducer: ee.Reducer.mean(),
+  scale: 1000
+})
+.setSeriesNames(['PM 2.5'])
+.setOptions({
+  lineWidth: 1,
+  title: 'PM 2.5',
+  curveType: 'function',
+  interpolateNulls: true,
+  vAxis: {title: 'PM 2.5'},
+  hAxis: {title: 'Date', format: 'DD-MM-YY', gridlines: {count: 10}},
+  trendlines: {0: {color: '00CC00'}}
+})
+print(chart)
+/*This code generates a time-series chart for PM2.5:
+The .image.series() function creates a time series by taking the mean PM2.5 values over the defined region (geometry) at each time point in the collection.
+The chart displays the PM2.5 values over time, with a trendline to show the overall trend of the data.
+setOptions allows customization of the chart's appearance, such as adding a title, axis labels, and trendline.*/
+ 
+
+//10. Add Layers to Map
+Map.addLayer(AOD_img, {}, 'Aerosol Optical Depth (0.47 µm)', false);
+Map.addLayer(PM25_img, pm25_vis, 'PM2.5', false);
+/*Finally, the AOD image and the PM2.5 image are added to the map:
+AOD_img: This is the image with the scaled aerosol optical depth, added without any specific visualization parameters.
+PM25_img: This is the image representing PM2.5, displayed using the custom color palette defined earlier.
+Both layers are added to the map but set to not visible by default (false), allowing the user to toggle their visibility on the map*/
+
+/*
+Summary
+This code performs the following steps:
+
+1.Defines a region of interest (ROI) and a time range for analysis.
+2.Loads aerosol optical depth (AOD) data from MODIS and filters it based on the time range and region.
+3.Applies a scaling factor to the AOD data and adds it as a new band.
+4.Converts the scaled AOD values to PM2.5 using a known empirical formula.
+5.Generates a time-series chart of PM2.5 over the specified period.
+6.Adds both AOD and PM2.5 layers to the map for visualization.*/
+
+
