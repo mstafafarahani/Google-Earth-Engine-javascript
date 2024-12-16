@@ -1,0 +1,214 @@
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////             vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com/////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/*
+YOu CAN USE city or provinceORstate or country boundary , in this code i use city boundary
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry)
+Map.addLayer(province)
+
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry)
+Map.addLayer(country)*/
+
+
+
+/*Key Concepts in this code ch4 :
+Google Earth Engine Basics:
+
+Collections: Datasets (e.g., feature collections or image collections).
+Filtering: Narrowing datasets by time, space, or attributes.
+Reduction: Summarizing data (e.g., calculating mean or trends).
+Working with Time Series:
+
+Monthly averages and anomalies help identify patterns or unusual events.
+Data Export:
+
+Exporting allows further analysis outside Google Earth Engine*/
+
+
+
+
+// Define the geometry first
+var geometry = /* color: #d63000 */ ee.Geometry.Point([-96.80297242661135, 32.7974661387047]);
+// This defines a point geometry (latitude and longitude) using Google Earth Engine's `ee.Geometry.Point` function.
+// The coordinates represent a specific location on Earth.
+
+// Define the city feature collection and filter by geometry
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry);
+// Here, we load a feature collection (a dataset of administrative boundaries) and filter it to keep only the areas 
+// that overlap with the geometry we defined earlier. `filterBounds` ensures we only work with relevant areas.
+
+// Add layers to the map
+Map.addLayer(city, {}, 'City Boundaries');
+// This adds the filtered city boundaries as a layer on the map. The second argument (`{}`) specifies style settings,
+// and 'City Boundaries' is the layer's name.
+Map.centerObject(geometry, 8);
+// Centers the map on the defined geometry with a zoom level of 8.
+
+
+// Define the start and end dates as strings
+var time_start = '2020-01-01';
+var time_end = '2024-01-01';
+// These variables define the time period for which we want to analyze methane data. 
+// The format is `YYYY-MM-DD`.
+
+// Load Sentinel-5P methane data
+var sen5 = ee.ImageCollection("COPERNICUS/S5P/OFFL/L3_CH4")
+  .select(['CH4_column_volume_mixing_ratio_dry_air'], ['methane'])
+  .filterDate(time_start, time_end)
+  .filterBounds(city);
+// The Sentinel-5P data provides global methane (CH4) measurements. 
+// - `.select` renames the methane band for simplicity (`CH4_column_volume_mixing_ratio_dry_air` → `methane`).
+// - `.filterDate` narrows the data to our time period.
+// - `.filterBounds` ensures the data only covers the area of interest (`city`).
+
+
+// Generate year and month lists
+var year_list = ee.List.sequence(2020, 2023);
+// Creates a list of years from 2020 to 2023 for iteration.
+var month_list = ee.List.sequence(1, 12);
+// Creates a list of months (1 to 12) for iteration.
+
+
+// Calculate monthly methane averages
+var methane_monthly = ee.ImageCollection(year_list.map(function(year) {
+  return month_list.map(function(month) {
+    var monthly = sen5
+      .filter(ee.Filter.calendarRange(year, year, 'year'))
+      .filter(ee.Filter.calendarRange(month, month, 'month'))
+      .mean();
+    // For each year and month, this filters the Sentinel-5P data to match the specified time period 
+    // and computes the monthly average methane level using `.mean()`.
+
+    var date = ee.Date.fromYMD(year, month, 1);
+    // Constructs a date object for the first day of the given month.
+
+    return monthly
+      .set('system:time_start', date.millis())
+      .set('system:index', date.format('YYYY-MM-dd'));
+    // Sets metadata for each monthly average image, including its start time and formatted index (YYYY-MM-DD).
+  });
+}).flatten());
+// Combines the results into a single image collection. `flatten` ensures the collection is 1-dimensional.
+
+
+// Plot methane time series
+print(ui.Chart.image.series(methane_monthly, city, ee.Reducer.mean(), 7000, 'system:time_start')
+  .setOptions({
+    lineWidth: 1,
+    title: 'CH4 Methane Levels',
+    curveType: 'function',
+    interpolateNulls: true,
+    vAxis: { title: 'CH4 Methane ppb' },
+    hAxis: { title: 'Date', format: 'DD-MM-YY', gridlines: { count: 10 } },
+    trendlines: { 0: { color: '00CC00' } }
+  }));
+// This creates a time-series chart of methane levels over the city. 
+// - `ui.Chart.image.series` computes the mean methane value for each image in the collection.
+// - `setOptions` customizes the chart's appearance (e.g., title, axis labels, and trendlines).
+
+
+// Calculate average methane
+var ave = methane_monthly.mean();
+// Computes the overall average methane level across the entire time period.
+
+
+// Define visualization parameters
+var band_viz = {
+  min:1883.1373770191758,
+  max: 1915.6620354129266,
+  palette: ['black', 'blue', 'purple', 'cyan', 'green', 'yellow', 'red']
+};
+// This specifies how the methane data will be visualized on the map (color scale and value range).
+
+
+// Add average methane layer
+Map.addLayer(ave.clip(city), band_viz, 'Methane Average', false);
+// Adds the average methane map as a layer to the map, clipped to the city boundaries. 
+// The `false` argument hides the layer by default.
+
+
+// Calculate methane anomalies
+var anomaly = methane_monthly.map(function(img) {
+  var index = img.subtract(ave).rename('anomaly');
+  // Subtracts the overall average methane level from each monthly image to calculate the anomaly.
+  return index.copyProperties(img, img.propertyNames());
+  // Copies metadata from the original image to the anomaly image.
+});
+
+
+// Plot anomaly time series
+print(ui.Chart.image.series(anomaly, city, ee.Reducer.mean(), 7000, 'system:time_start')
+  .setChartType('ColumnChart')
+  .setOptions({
+    lineWidth: 1,
+    title: 'CH4 Methane Anomalies',
+    curveType: 'function',
+    interpolateNulls: true,
+    vAxis: { title: 'CH4 Methane ppb' },
+    hAxis: { title: 'Date', format: 'DD-MM-YY', gridlines: { count: 10 } },
+    trendlines: { 0: { color: '00CC00' } }
+  }));
+// This creates a column chart showing the methane anomalies over time.
+
+
+// Filter positive anomalies
+var pos_anomaly = anomaly.map(function(img) {
+  var ave_anom = ee.Number(img.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: city,
+    scale: 7000
+  }).values().get(0));
+  // Computes the mean anomaly value for the city area.
+
+  return img.copyProperties(img, img.propertyNames()).set('methane_value', ave_anom);
+  // Adds the mean anomaly value as metadata to the image.
+}).filter(ee.Filter.gt('methane_value', 0));
+// Filters the collection to include only images with positive mean anomalies.
+
+
+// Plot positive anomalies
+print(ui.Chart.image.series(pos_anomaly, city, ee.Reducer.mean(), 7000, 'system:time_start')
+  .setChartType('ColumnChart')
+  .setOptions({
+    lineWidth: 1,
+    title: 'Positive CH4 Methane Anomalies',
+    curveType: 'function',
+    interpolateNulls: true,
+    vAxis: { title: 'CH4 Methane ppb' },
+    hAxis: { title: 'Date', format: 'DD-MM-YY', gridlines: { count: 10 } },
+    trendlines: { 0: { color: '00CC00' } }
+  }));
+// This creates a column chart showing only the positive methane anomalies over time.
+
+
+// Export positive anomalies to Google Drive
+Export.image.toDrive({
+  image: pos_anomaly.toBands().clip(city),
+  description: 'pos_anomaly',
+  region: city.geometry().bounds(),
+  scale: 7000,
+  maxPixels: 1e13,
+  folder: 'test',
+  crs: 'EPSG:4326'
+});
+// This exports the positive anomalies as a raster image to Google Drive.
+// - `toBands` combines all images into a single multi-band image for export.
+// - `clip(city)` ensures the exported data is limited to the city boundaries.
+
+
+// Calculate methane trend
+var trend = methane_monthly.reduce(ee.Reducer.kendallsCorrelation());
+// Computes the Kendall's Tau correlation coefficient for methane levels over time.
+// This helps identify trends (increasing, decreasing, or stable levels).
+
+
+// Add trend layer
+Map.addLayer(trend.select('methane_tau').clip(city), { palette: ['green', 'black', 'red'] }, 'CH4 Trend', false);
+// Visualizes the trend layer on the map. The palette colors indicate the direction and magnitude of the trend:
+// - Green = decreasing trend, Red = increasing trend, Black = no significant trend.
