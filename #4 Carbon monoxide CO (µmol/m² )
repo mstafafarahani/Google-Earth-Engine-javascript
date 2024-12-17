@@ -1,0 +1,207 @@
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////             vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com/////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/*
+YOu CAN USE city or provinceORstate or country boundary , in this code i use city boundary
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry)
+Map.addLayer(province)
+
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry)
+Map.addLayer(country)*/
+
+var geometry = /* color: #98ff00 */ee.Geometry.Point([56.84127888771607, 29.322839719148973]);
+/*This code takes a step-by-step approach to analyze and visualize carbon monoxide (CO) concentrations from the Sentinel-5P satellite.
+Here’s a complete breakdown:
+Centering the Map: The first line centers the map on a given region of interest (geometry). 
+It sets the zoom level to 3, which ensures that the map 
+is zoomed out enough to show the full region (e.g., a country).
+Loading and Filtering Country Boundaries: Using the FAO GAUL dataset, the code filters 
+for countries that intersect with the specified region (geometry). This step ensures that we are only working with relevant data 
+from the countries that fall within the bounds of the region of interest.
+Adding Country Boundaries to the Map: This simply adds the country boundaries to the map to provide a visual reference
+Loading CO Data from Sentinel-5P: The Sentinel-5P dataset is loaded, and the data is filtered to only include
+images of CO (carbon monoxide) measurements that fall within the region of interest (the filtered*/
+
+// 1. Center the map on the area of interest defined by 'geometry' (with a zoom level of 3)
+Map.centerObject(geometry, 3);
+
+// Explanation:
+// This line of code centers the map on the geographical area that is defined by the variable 'geometry'.
+// 'geometry' can be any polygon or region of interest, such as a country, region, or specific coordinates.
+// The number `3` is the zoom level, where a value of 3 indicates a broad view, perfect for working with country or regional data.
+// This ensures the map zooms in and centers on your area of interest when the script runs.
+
+// 2. Load country boundary data from the FAO GAUL dataset and filter it to the 'geometry' area
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+
+// Explanation:
+// The `FAO/GAUL` dataset provides country-level boundaries worldwide, at the first administrative level (countries).
+// The `"FAO/GAUL/2015/level0"` dataset is used here, which contains countries' shapes (polygons) and other geographic properties.
+// `filterBounds(geometry)` filters the dataset to only include countries that intersect with the region 
+//defined by the 'geometry' variable.
+// If 'geometry' is a smaller area within a country, only those countries that intersect with that region will be included.
+// The result is stored in the 'country' variable, which will be used in further analysis.
+
+// 3. Add the country boundaries layer to the map for visualization
+Map.addLayer(country);
+
+// Explanation:
+// This line adds the 'country' FeatureCollection (the filtered country boundaries) to the map.
+// It allows you to visually see the selected countries or region of interest on the map. 
+//This is useful for reference and verification.
+
+// 4. Load Sentinel-5P CO data (carbon monoxide concentration) and filter based on time and location
+var index = ee.ImageCollection("COPERNICUS/S5P/NRTI/L3_CO")
+    .select('CO_column_number_density')  // Select the specific band containing CO data
+    .filterBounds(country)               // Filter the data based on the country boundaries
+    .filterDate('2022-01-01', '2022-01-28');  // Filter the data for the specified time range
+
+// Explanation:
+// This part of the code loads Sentinel-5P satellite data from the Copernicus Sentinel-5P mission.
+// Sentinel-5P provides air quality data, including carbon monoxide (CO) concentrations.
+// `ee.ImageCollection("COPERNICUS/S5P/NRTI/L3_CO")` is the dataset for CO measurements at the surface level,
+//specifically using the "L3" (Level 3) data.
+// `.select('CO_column_number_density')` selects the specific band containing CO concentrations in units of mol/cm².
+// `.filterBounds(country)` ensures that only data within the bounds of the selected countries (from the 'country' variable) is used.
+// `.filterDate('2022-01-01', '2022-03-28')` filters the image collection to only include images from January 1, 2022, to March 28, 2022.
+// This time window is set to focus on a specific period, allowing for targeted analysis of CO levels during these months.
+
+// 5. Process the image collection: Clip to the country boundaries and convert units to µmol/m²
+index = index.map(function(img) {
+  return img.clip(country)  // Clip the image to the region defined by the country boundaries
+            .multiply(1000000)  //  if 10000(mol/cm²) if 1(mol/m²) if 1000000(µmol/m²)
+            .copyProperties(img, ['system:time_start']);  // Retain time-related metadata
+});
+
+// Explanation:
+// `.map(function(img) {...})` applies a function to each image in the image collection (which is 'index' here).
+// For each image in the collection:
+//   - `img.clip(country)` clips the image so that only the area within the boundaries of the selected country is kept.
+//This eliminates data outside the region of interest.
+//   - `.multiply(1000000)` scales the concentration values. The original data from Sentinel-5P might be in units of mol/cm². 
+//To make it more interpretable, we multiply by 1,000,000 to convert it to µmol/m², which is a common unit for air pollution concentration.
+//   - `.copyProperties(img, ['system:time_start'])` ensures that the time of capture (metadata) for each image is retained, 
+//which will be useful for time-series analysis later.
+// The result is a collection of images with CO concentration data (now in µmol/m²) clipped to the country region.
+
+
+// 6. Print the size (number of images) of the image collection to the console
+print(index.size());
+
+// Explanation:
+// The `print(index.size())` function outputs the size of the image collection, i.e., the number of images present 
+//in the filtered collection.
+// This is useful for verifying that you have the correct number of images for your analysis
+//(i.e., checking if data for all the dates in the specified range is available).
+
+
+// 7. Generate a time series chart showing the average CO concentration over time in the specified region
+print((ui.Chart.image.series(index, country, ee.Reducer.mean(), 1113.2, 'system:time_start')).setSeriesNames(['CO Concentration (µmol/m²)'])
+    .setOptions({
+      title: 'CO Concentration Over Time',
+      interpolateNulls: true,  // Interpolates missing values between data points
+      lineWidth: 1,  // Sets the thickness of the chart line
+      pointSize: 2,  // Sets the size of the points on the chart
+      curveType: 'function',  // Creates a smooth curve for the time series
+      vAxis: { title: 'CO Concentration (µmol/m²)' }  // Sets the title for the vertical axis
+    })
+);
+
+// Explanation:
+// `ui.Chart.image.series()` generates a time-series chart of the data in the 'index' image collection.
+// It calculates the mean CO concentration for each image in the collection over the specified region (the 'country' region).
+// The chart displays this average concentration over time, using 'system:time_start' as the time axis 
+//(the timestamp when the data was collected).
+// `ee.Reducer.mean()` computes the mean value of the CO concentration for each image.
+// `1113.2` specifies the resolution of the images (in meters per pixel), which is important for the chart’s scale and accuracy.
+// The chart is then customized with several options:
+//   - `interpolateNulls: true` ensures that gaps in the data (null values) are interpolated.
+//   - `lineWidth: 1` and `pointSize: 2` control the visual appearance of the chart’s line and points.
+//   - `curveType: 'function'` smooths the chart to create a continuous curve.
+//   - `vAxis` specifies the label for the vertical axis, which in this case represents CO concentration in µmol/m².
+
+
+// 8. Calculate the mean of all images in the collection and visualize the result as a heatmap on the map
+Map.addLayer(index.mean(), {
+  min: 18975.087222943177,  // Minimum value for visualization scaling
+  max: 33981.87503081117,   // Maximum value for visualization scaling
+  palette: ['purple', 'cyan', 'green', 'yellow', 'red']  // Color palette for the heatmap
+}, 'CO Air Pollution Map');
+
+// Explanation:
+// `index.mean()` calculates the average CO concentration across all images in the filtered collection.
+// This gives a single image representing the mean concentration of CO over the entire period (January 1, 2022, to March 28, 2022) within the selected region.
+// The `Map.addLayer()` function then adds this mean image to the map for visualization.
+// The `min` and `max` values are set manually to scale the CO concentration values in the color palette.
+//These values define the range of CO concentrations that will be mapped to the chosen colors.
+// The `palette` defines a color gradient, where 'purple' represents the lowest concentrations and 'red' represents the highest. 
+//This allows you to visually interpret the areas with the highest and lowest CO concentrations.
+// The layer is labeled as 'CO Air Pollution Map' for easy identification on the map.
+
+// END OF SCRIPT
+
+
+
+
+
+//----------------------------------------------------------------------------------------------------------------
+// Define the palette and labels
+var palette = ['purple', 'cyan', 'green', 'yellow', 'red']
+var labels =  ['LOW:18975', 'Middle','Middle','Middle', 'HIGH:33981']
+
+// Create the legend
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',
+    padding: '8px 15px'
+  }
+});
+
+// Title for the legend
+var legendTitle = ui.Label({
+  value: 'Air pollution CO (µmol/m^2) YEAR:2022 in IRAN Country',
+  style: {
+    fontWeight: 'bold',
+    fontSize: '16px',
+    margin: '0 0 10px 0',
+    padding: '0'
+  }
+});
+legend.add(legendTitle);
+
+// Function to create a legend item
+var makeLegendItem = function(color, name) {
+  var colorBox = ui.Label({
+    style: {
+      backgroundColor: color,
+      padding: '8px',
+      margin: '0 0 4px 0'
+    }
+  });
+
+  var description = ui.Label({
+    value: name,
+    style: {
+      margin: '0 0 4px 6px'
+    }
+  });
+
+  return ui.Panel({
+    widgets: [colorBox, description],
+    layout: ui.Panel.Layout.Flow('horizontal')
+  });
+};
+
+// Add each color and label to the legend
+for (var i = 0; i < palette.length; i++) {
+  legend.add(makeLegendItem(palette[i], labels[i]));
+}
+
+// Add the legend to the map
+Map.add(legend);
