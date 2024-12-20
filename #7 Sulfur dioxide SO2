@@ -1,0 +1,243 @@
+/*                 vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com          */
+
+
+
+
+var Refinery1 = 
+    /* color: #d63000 */
+    /* shown: false */
+    ee.Geometry.Polygon(
+        [[[52.65281643711253, 27.490263448478174],
+          [52.642602585183816, 27.495935693942403],
+          [52.63534989200755, 27.484971627170406],
+          [52.64702286564036, 27.479108449093157]]]),
+    Refinery2 = 
+    /* color: #98ff00 */
+    /* shown: false */
+    ee.Geometry.Polygon(
+        [[[52.64243092380686, 27.49610699882281],
+          [52.637688913849516, 27.49968538633729],
+          [52.6314875110261, 27.502045403199034],
+          [52.62410607181712, 27.491120014344705],
+          [52.62824753380826, 27.486875260242044],
+          [52.634877823220926, 27.485752091622714]]]),
+    Refinery3 = 
+    /* color: #0b4a8b */
+    /* shown: false */
+    ee.Geometry.Polygon(
+        [[[52.63097252689524, 27.502091437659224],
+          [52.62230362735911, 27.507839200986247],
+          [52.616939209329324, 27.495429746983046],
+          [52.62406315647288, 27.492155854106887]]]),
+    Refinery4 = 
+    /* color: #ffc82d */
+    /* shown: false */
+    ee.Geometry.Polygon(
+        [[[52.62457814060374, 27.50909529471684],
+          [52.62698139988108, 27.513967280162344],
+          [52.62286152683421, 27.518534570548635],
+          [52.60878529392405, 27.51244480788861],
+          [52.60157551609202, 27.520361433597024],
+          [52.578229568826394, 27.544412299481188],
+          [52.560720108377176, 27.536954049644677],
+          [52.59573902927561, 27.49889387645171],
+          [52.61427845798655, 27.493412126838255],
+          [52.622174881326394, 27.508486281365617]]]),
+    NANRefinery = 
+    /* color: #18ffef */
+    /* shown: false */
+    ee.Geometry.Polygon(
+        [[[52.621188455694934, 27.488700977928147],
+          [52.59612589465978, 27.497076121505522],
+          [52.58462458240392, 27.50758221870886],
+          [52.57363825427892, 27.51945746853551],
+          [52.562995248907825, 27.53498470666162],
+          [52.555785471075794, 27.536811296368644],
+          [52.54634409534337, 27.533310306093785],
+          [52.555785471075794, 27.522654432124057],
+          [52.562480264776966, 27.51945746853551],
+          [52.573981577032825, 27.50316673482143],
+          [52.57707148181798, 27.501644113090126],
+          [52.59495752937969, 27.479686513503864],
+          [52.606897018777566, 27.46668468933921],
+          [52.617196701394754, 27.463638415955415],
+          [52.625436447488504, 27.461049017389104],
+          [52.634362839090066, 27.45510840264094],
+          [52.64723744236155, 27.477041389061707]]]);
+
+/*
+### Script Description: Sulfur Dioxide (SO2) Analysis Using Google Earth Engine (GEE)
+
+This script processes and visualizes satellite data to analyze **Sulfur Dioxide (SO2)** concentrations in specific regions of interest (ROIs). 
+It retrieves data from the Sentinel-5P satellite and demonstrates data visualization, trend analysis, and legend creation for easy interpretation.
+
+### Key Features:
+1. **Region Definition**: Locations of interest (ROIs) are defined for analysis.
+2. **SO2 Data Retrieval**: SO2 data is collected for a specified time range in 2024.
+3. **Data Processing**:
+   - Values are converted to **micro-moles per square meter (µmol/m²)** for easier comprehension.
+   - Data is clipped to the defined ROIs for localized analysis.
+4. **Visualization**:
+   - SO2 levels are visualized on a map using a color-coded gradient.
+   - A time-series chart shows SO2 trends for each ROI.
+5. **Legend**: A detailed legend is created for the map, explaining the data range with color indicators.
+
+### Code Breakdown:
+*/
+
+// **Step 1: Define Regions of Interest (ROIs)**
+// These regions represent the geographical locations to analyze SO2 levels. 
+// Each ROI is added to a feature collection with metadata (e.g., a name or description).
+var locations = ee.FeatureCollection([
+  ee.Feature(Refinery1, {'name': 'Refinery1+Sulfur dioxide SO2 (µmol/m²)'}),
+  ee.Feature(Refinery2, {'name': 'Refinery2'}),
+  ee.Feature(Refinery3, {'name': 'Refinery3'}),
+  ee.Feature(NANRefinery, {'name': 'Refinery4'}),
+  ee.Feature(Refinery3, {'name': 'NANRefinery'})
+]);
+
+// Center the map on the defined regions
+Map.centerObject(locations, 14);
+
+// Add the regions as a layer on the map for visualization
+Map.addLayer(locations, {}, ' name of your layer ', false);
+
+// **Step 2: Retrieve SO2 Data from Sentinel-5P Satellite**
+// Sentinel-5P provides atmospheric composition data, including SO2 density. 
+// Here, data is filtered for:
+    // - The selected regions (ROIs)
+    // - The date range of 2024
+var index1 = ee.ImageCollection("COPERNICUS/S5P/OFFL/L3_SO2")
+  .select('SO2_column_number_density_amf') // Select the SO2 data band
+  .filterBounds(locations) // Filter by region
+  .filterDate('2024-01-31', '2024-04-30') // Filter by date
+  .map(function(img) {
+    // Process each image:
+      // - Clip the image to the ROIs
+      // - Convert units to µmol/m² (multiplication factor: 1,000,000)
+      // - Retain metadata for temporal analysis
+    return img.clip(locations)
+      .multiply(1000000) //  if 10000(mol/cm²) if 1(mol/m²) if 1000000(µmol/m²)
+      .subtract(0) // Offset adjustment (if needed)
+      .copyProperties(img, ['system:time_start']);
+  });
+
+// Print the size of the filtered image collection (number of images)
+print(index1.size());
+
+// **Step 3: Visualize SO2 Data**
+// Add a layer to the map showing the average SO2 concentration using a color gradient.
+Map.addLayer(index1.mean(), {min: 505526, max: 721009, palette: ['blue', 'cyan', 'green', 'yellow', 'red']}, 
+             'Sulfur dioxide SO2 (µmol/m²)', false);
+
+// **Step 4: Create a Time-Series Chart**
+// Generate a chart to visualize the trend of SO2 levels for each region over time.
+var chart = ui.Chart.image.seriesByRegion({
+  imageCollection: index1,
+  regions: locations,
+  reducer: ee.Reducer.mean(), // Calculate the mean SO2 value for each region
+  scale: 1000, // Resolution for analysis
+  seriesProperty: 'name' // Use region names as series identifiers
+})
+.setOptions({
+  interpolateNulls: true, // Smooth gaps in data
+  lineWidth: 1,
+  pointSize: 2,
+  curveType: 'function', // Use smooth curves
+  title: 'Sulfur dioxide SO2 Trends',
+  vAxis: {title: 'SO2 (µmol/m²)'},
+  hAxis: {title: 'Date', format: 'YYYY-MM-dd'},
+  series: { // Define colors for each ROI
+    0: {color: 'orange'},
+    1: {color: 'yellow'},
+    2: {color: 'green'},
+    3: {color: 'purple'},
+    4: {color: 'blue'}
+  },
+  legend: {position: 'top'} // Position the legend at the top
+});
+print(chart);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//--------------------------------------------------------------
+// **Step 5: Add a Legend to the Map**
+// Create a legend panel to explain the color gradient used in the SO2 map layer.
+// Create a panel to display the legend
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',  // Position the panel in the bottom-right corner
+    padding: '8px 13px'  // Add padding for better appearance
+  }
+});
+
+// Add a title to the legend
+var legendTitle = ui.Label({
+  value: 'SO2 (µmol/m²)',  // Title text
+  style: {
+    fontWeight: 'bold',  // Make the font bold
+    fontSize: '18px',  // Set the font size
+    margin: '0 0 4px 0',  // Margin for spacing
+    padding: '0'  // No padding for the label
+  }
+});
+
+// Add the title to the legend panel
+legend.add(legendTitle);
+
+// Function to create a vertical color bar
+var makeColorBar = function(palette) {
+  var colorBar = ui.Thumbnail({
+    image: ee.Image.pixelLonLat().select(1),  // Use latitude as the image for the gradient
+    params: {
+      bbox: [0, 0, 0.1, 1],  // Create a vertical color bar
+      dimensions: '10x100',  // Set the size of the color bar (10 pixels wide and 100 pixels high)
+      format: 'png',  // Image format
+      min: 0,  // Minimum value for the color bar
+      max: 1,  // Maximum value for the color bar
+      palette: palette,  // Use the provided palette for colors
+    },
+    style: {stretch: 'vertical', margin: '8px 0'}  // Stretch the color bar vertically and add margin
+  });
+  return colorBar;  // Return the created color bar
+};
+
+// Define the magma color palette
+var palette = ['blue', 'cyan', 'green','yellow', 'red'];  // Colors for the magma palette
+
+// Create labels for the min and max values
+var minLabel = ui.Label({
+  value: '721009',  // Label for the maximum value
+  style: {margin: '4px 8px'}  // Add margin for better appearance
+});
+var maxLabel = ui.Label({
+  value: '505526',  // Label for the minimum value
+  style: {margin: '4px 8px'}  // Add margin for better appearance
+});
+
+// Add the min label, color bar, and max label to the legend panel in a vertical layout
+legend.add(minLabel);  // Add the min label at the top
+legend.add(makeColorBar(palette));  // Add the color bar in the middle
+legend.add(maxLabel);  // Add the max label at the bottom
+
+// Add the legend panel to the map
+Map.add(legend);
+
