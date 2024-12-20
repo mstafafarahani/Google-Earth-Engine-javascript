@@ -1,0 +1,143 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com
+
+
+
+/*YOu CAN USE city or provinceORstate or country boundary , in this code i use city boundary
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry) //boundary city
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry) // Define the country boundary
+Map.addLayer(country) // Add the country layer to the map
+/*Explanation:
+1. **Country Boundary:**
+   - The `country` variable uses the FAO/GAUL dataset to define the country's boundary based on the geometry.
+   - It is displayed on the map using `Map.addLayer()`.*/
+
+
+
+Map.centerObject(geometry, 3) // Center the map on the geometry with zoom level 3
+/*2. **Map Centering:**
+   - The map is centered on the geometry region with a zoom level of 3 using `Map.centerObject()`.*/
+
+// Load and process HCHO data for a specific date range
+var index = ee.ImageCollection("COPERNICUS/S5P/NRTI/L3_HCHO")
+  .select('tropospheric_HCHO_column_number_density', 
+          "tropospheric_HCHO_column_number_density_amf", 
+          "HCHO_slant_column_number_density")
+  .filterBounds(country)
+  .filterDate('2022-01-01', '2022-02-05');
+/*3. **HCHO Data Loading and Processing:**
+   - The Sentinel-5P dataset (`COPERNICUS/S5P/NRTI/L3_HCHO`) is filtered by date and region.
+   - Selected bands include data about Formaldehyde in the troposphere.
+   - Each image is clipped to the country's boundary, scaled to µmol/m², and metadata is retained.*/
+
+index = index.map(function(img) {
+  return img.clip(country) // Clip images to the country boundary
+            .subtract(0)
+            .multiply(1000000) // Convert units to µmol/m² //  if 10000(mol/cm²) if 1(mol/m²) if 1000000(µmol/m²)
+            .copyProperties(img, ['system:time_start']); // Retain metadata
+})
+
+
+print(index.size()); // Print the number of images in the collection
+
+// Create a time series chart of HCHO data
+print((ui.Chart.image.series(index, country, ee.Reducer.mean(), 1113.2, 'system:time_start'))
+  .setSeriesNames(['Tropospheric HCHO column number density', 
+                   'Tropospheric air mass factor', 
+                   'HCHO slant column number density'])// set name for each column in our csv file
+  .setOptions({
+    title: 'Formaldehyde HCHO',
+    interpolateNulls: true,
+    lineWidth: 1,
+    pointSize: 2,
+    curveType: 'function',
+    vAxis: { title: 'mol/m²' }
+  }))
+/*4. **Time Series Chart:**
+   - A time series chart is generated for the selected bands over the country region.
+   - The chart shows mean values over time at a scale of 1113.2 meters.
+   - Custom options such as title, axis labels, and interpolation are applied*/
+
+// Load and visualize mean HCHO data for an extended date range
+var index = ee.ImageCollection("COPERNICUS/S5P/NRTI/L3_HCHO")
+  .select('tropospheric_HCHO_column_number_density')
+  .filterBounds(country)
+  .filterDate('2022-01-01', '2022-01-28');
+
+index = index.map(function(img) {
+  return img.clip(country)
+            .multiply(1000000) // Convert units to µmol/m²
+            .copyProperties(img, ['system:time_start']); // Retain metadata
+});
+
+Map.addLayer(index.mean(), {
+  min: 0.0,
+  max: 0.0003,
+  palette: ['black', 'blue', 'purple', 'cyan', 'green', 'yellow', 'red']
+}, 'Formaldehyde HCHO',false);
+/*5. **Mean HCHO Visualization:**
+   - Another HCHO dataset is filtered for a longer time range and processed similarly.
+   - The mean image is visualized with a color palette representing different concentrations of Formaldehyde.*/
+
+
+
+// Define the palette and labels----------------------------------------------------------------
+var palette = ['black', 'blue', 'purple', 'cyan', 'green', 'yellow', 'red']
+var labels = ['Minimal:1µmol/m^2','Suboptimal','Moderate','Satisfactory','Optimal','Superior','Maximal:4.9µmol/m^2']
+// Create the legend
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',
+    padding: '8px 15px'
+  }
+});
+
+// Title for the legend
+var legendTitle = ui.Label({
+  value: 'Formaldehyde HCHO (µmol/m^2) - Argentina - 2024',
+  style: {
+    fontWeight: 'bold',
+    fontSize: '19px',
+    margin: '0 0 10px 0',
+    padding: '0'
+  }
+});
+legend.add(legendTitle);
+
+// Function to create a legend item
+var makeLegendItem = function(color, name) {
+  var colorBox = ui.Label({
+    style: {
+      backgroundColor: color,
+      padding: '8px',
+      margin: '0 0 4px 0'
+    }
+  });
+
+  var description = ui.Label({
+    value: name,
+    style: {
+      margin: '0 0 4px 6px'
+    }
+  });
+
+  return ui.Panel({
+    widgets: [colorBox, description],
+    layout: ui.Panel.Layout.Flow('horizontal')
+  });
+};
+
+// Add each color and label to the legend
+for (var i = 0; i < palette.length; i++) {
+  legend.add(makeLegendItem(palette[i], labels[i]));
+}
+
+// Add the legend to the map
+Map.add(legend);
