@@ -23,44 +23,44 @@ Map.centerObject(geometry,4)
 */
 
 // Load MODIS land cover data and filter by country and date range
-var Savannas = ee.ImageCollection("MODIS/061/MCD12Q1").select('LC_Type1').filterBounds(country).filterDate('2001-01-01', '2023-01-01');
-print('Number of images in the collection:', Savannas.size());
+var Grasslands = ee.ImageCollection("MODIS/061/MCD12Q1").select('LC_Type1').filterBounds(country).filterDate('2001-01-01', '2023-01-01');
+print('Number of images in the collection:', Grasslands.size());
 
 // Select the first image from the collection
-var firstImage = Savannas.first();
+var firstImage = Grasslands.first();
 
-// Process the Savannas areas by clipping and identifying Savannas class (value 8 or 9 for Savannas land)
-var SavannasCover = Savannas.map(function(image) {
+// Process the Grasslands areas by clipping and identifying Grasslands class (value 8 or 9 for Grasslands land)
+var GrasslandsCover = Grasslands.map(function(image) {
   var cliped = image.clip(country); // Clip the image to the country boundary
 //10	#b6ff05	Grasslands: dominated by herbaceous annuals (<2m).
-  var Savannas = cliped.eq(8)// Savannas land class is represented by the value 
+  var Grasslands = cliped.eq(10)// Grasslands land class is represented by the value 
   
   
-  var maskedSavannas = Savannas.updateMask(Savannas); // Mask the Savannas class areas
-  var SavannasAreaInKm2 = maskedSavannas.multiply(ee.Image.pixelArea().divide(1e6)); 
+  var maskedGrasslands = Grasslands.updateMask(Grasslands); // Mask the Grasslands class areas
+  var GrasslandsAreaInKm2 = maskedGrasslands.multiply(ee.Image.pixelArea().divide(1e6)); 
   // Convert area to km² and 1e4 for convert to ha ,1for converting m²
-  return SavannasAreaInKm2.copyProperties(image, ['system:time_start', 'system:time_end']);
+  return GrasslandsAreaInKm2.copyProperties(image, ['system:time_start', 'system:time_end']);
 });
 
-// Create a time series chart showing Savannas area growth
+// Create a time series chart showing Grasslands area growth
 print(ui.Chart.image.series({
-  imageCollection: SavannasCover,
+  imageCollection: GrasslandsCover,
   region: country,
   reducer: ee.Reducer.sum(),
   scale: 500,
   xProperty: 'system:time_start'
-}).setSeriesNames(['Savannas  AREA  Growth km2']).setOptions({
-  title: 'Savannas  AREA  Growth',
+}).setSeriesNames(['Grasslands  AREA  Growth km2']).setOptions({
+  title: 'Grasslands  AREA  Growth',
   hAxis: {title: 'Year'},
-  vAxis: {title: 'Savannas  AREA  (km²)'},
+  vAxis: {title: 'Grasslands  AREA  (km²)'},
   interpolateNulls: true,
   lineWidth: 1,
   pointSize: 2,
   curveType: 'function'
 }));
 
-// Add the Savannas growth layer to the map
-Map.addLayer(SavannasCover.sum(), {min: 32.25081287384033, max: 511.47217334747313, palette: ['ff125c']}, 'Savannas Area Growth', false);
+// Add the Grasslands growth layer to the map
+Map.addLayer(GrasslandsCover.sum(), {min: 32.25081287384033, max: 511.47217334747313, palette: ['ff125c']}, 'Grasslands Area Growth', false);
 
 
 
@@ -83,7 +83,7 @@ var legend = ui.Panel({
 
 // Add a title to the legend
 var legendTitle = ui.Label({
-  value: 'Savannas Area Growth Area (m²)',  // Title text
+  value: 'Grasslands Area Growth Area (m²)',  // Title text
   style: {
     fontWeight: 'bold',  // Make the font bold
     fontSize: '18px',  // Set the font size
