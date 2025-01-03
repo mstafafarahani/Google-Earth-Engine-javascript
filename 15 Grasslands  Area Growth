@@ -1,0 +1,136 @@
+
+
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com
+
+var geometry = /* color: #ffc82d */ee.Geometry.Point([-107.0288254944211, 27.328842460676864]);
+
+/*YOu CAN USE city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry) //boundary city
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+// Define the country boundary using FAO/GAUL dataset and filter by geometry
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,4)
+   /*- The `country` variable uses the FAO/GAUL dataset to define the country's boundary based on the geometry.
+   - It is displayed on the map using `Map.addLayer()`.
+*/
+
+// Load MODIS land cover data and filter by country and date range
+var Savannas = ee.ImageCollection("MODIS/061/MCD12Q1").select('LC_Type1').filterBounds(country).filterDate('2001-01-01', '2023-01-01');
+print('Number of images in the collection:', Savannas.size());
+
+// Select the first image from the collection
+var firstImage = Savannas.first();
+
+// Process the Savannas areas by clipping and identifying Savannas class (value 8 or 9 for Savannas land)
+var SavannasCover = Savannas.map(function(image) {
+  var cliped = image.clip(country); // Clip the image to the country boundary
+//10	#b6ff05	Grasslands: dominated by herbaceous annuals (<2m).
+  var Savannas = cliped.eq(8)// Savannas land class is represented by the value 
+  
+  
+  var maskedSavannas = Savannas.updateMask(Savannas); // Mask the Savannas class areas
+  var SavannasAreaInKm2 = maskedSavannas.multiply(ee.Image.pixelArea().divide(1e6)); 
+  // Convert area to km² and 1e4 for convert to ha ,1for converting m²
+  return SavannasAreaInKm2.copyProperties(image, ['system:time_start', 'system:time_end']);
+});
+
+// Create a time series chart showing Savannas area growth
+print(ui.Chart.image.series({
+  imageCollection: SavannasCover,
+  region: country,
+  reducer: ee.Reducer.sum(),
+  scale: 500,
+  xProperty: 'system:time_start'
+}).setSeriesNames(['Savannas  AREA  Growth km2']).setOptions({
+  title: 'Savannas  AREA  Growth',
+  hAxis: {title: 'Year'},
+  vAxis: {title: 'Savannas  AREA  (km²)'},
+  interpolateNulls: true,
+  lineWidth: 1,
+  pointSize: 2,
+  curveType: 'function'
+}));
+
+// Add the Savannas growth layer to the map
+Map.addLayer(SavannasCover.sum(), {min: 32.25081287384033, max: 511.47217334747313, palette: ['ff125c']}, 'Savannas Area Growth', false);
+
+
+
+
+
+
+
+
+
+
+
+//---------------------------------------------------------
+// Create a panel to display the legend
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',  // Position the panel in the bottom-right corner
+    padding: '8px 13px'  // Add padding for better appearance
+  }
+});
+
+// Add a title to the legend
+var legendTitle = ui.Label({
+  value: 'Savannas Area Growth Area (m²)',  // Title text
+  style: {
+    fontWeight: 'bold',  // Make the font bold
+    fontSize: '18px',  // Set the font size
+    margin: '0 0 4px 0',  // Margin for spacing
+    padding: '0'  // No padding for the label
+  }
+});
+
+// Add the title to the legend panel
+legend.add(legendTitle);
+
+// Function to create a vertical color bar
+var makeColorBar = function(palette) {
+  var colorBar = ui.Thumbnail({
+    image: ee.Image.pixelLonLat().select(1),  // Use latitude as the image for the gradient
+    params: {
+      bbox: [0, 0, 0.1, 1],  // Create a vertical color bar
+      dimensions: '10x100',  // Set the size of the color bar (10 pixels wide and 100 pixels high)
+      format: 'png',  // Image format
+      min: 0,  // Minimum value for the color bar
+      max: 1,  // Maximum value for the color bar
+      palette: palette,  // Use the provided palette for colors
+    },
+    style: {stretch: 'vertical', margin: '8px 0'}  // Stretch the color bar vertically and add margin
+  });
+  return colorBar;  // Return the created color bar
+};
+
+// Define the magma color palette
+var palette = ['ff125c'] // Colors for the magma palette
+
+// Create labels for the min and max values
+var minLabel = ui.Label({
+  value: '1072',  // Label for the maximum value
+  style: {margin: '4px 8px'}  // Add margin for better appearance
+});
+var maxLabel = ui.Label({
+  value: '162',  // Label for the minimum value
+  style: {margin: '4px 8px'}  // Add margin for better appearance
+});
+
+// Add the min label, color bar, and max label to the legend panel in a vertical layout
+legend.add(minLabel);  // Add the min label at the top
+legend.add(makeColorBar(palette));  // Add the color bar in the middle
+legend.add(maxLabel);  // Add the max label at the bottom
+
+// Add the legend panel to the map
+Map.add(legend);
+
+
