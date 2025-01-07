@@ -23,7 +23,7 @@ Map.centerObject(geometry,3)
 
 var Evaporation = ee.ImageCollection("NASA/FLDAS/NOAH01/C/GL/M/V001").select('Evap_tavg').filterBounds(country).filterDate('2020-01-01','2023-12-20')
 var Evaporationn = Evaporation.map(function(img){
-  return img.clip(country).multiply(0.1).copyProperties(img, ['system:time_start'])})
+  return img.clip(country).multiply(1).copyProperties(img, ['system:time_start'])})
 print(Evaporationn.size())
 Map.addLayer(Evaporationn.mean(),{min:0.000002675999357274843,max:8.75470474544689 ,palette:['#00007f', '#0000ff', '#007fff', '#00ffff', '#7fff7f', '#ffff00', '#ff7f00', '#ff0000', '#7f0000']},'      Evaporation    ')
 
