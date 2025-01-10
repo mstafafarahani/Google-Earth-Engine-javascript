@@ -1,0 +1,120 @@
+
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com
+var geometry = 
+    /* color: #98ff00 */
+    /* shown: false */
+    ee.Geometry.Point([10.227079155889536, 50.37937774597287]);
+/*YOu CAN USE city boundary and run this code only for your  city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600C/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+YOu CAN USE province boundary and run this code only for your  province
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+//YOu CAN USE country boundary and run this code only for your  country
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country  boundary to the map
+Map.centerObject(geometry,3)
+
+var Vaporpressuredeficit   = ee.ImageCollection("IDAHO_EPSCOR/TERRACLIMATE").select('vpd').filterBounds(country).filterDate('2017-12-24','2020-12-20')
+var Vaporpressuredeficit   = Vaporpressuredeficit.map(function(img){
+  return img.clip(country).multiply(0.01).subtract(0).add(0).copyProperties(img, ['system:time_start'])})
+
+print(Vaporpressuredeficit.size())
+Map.addLayer(Vaporpressuredeficit.mean(),{min:0,max:2 ,palette:['#00007f', '#0000ff', '#007fff', '#00ffff', '#7fff7f', '#ffff00', '#ff7f00', '#ff0000', '#7f0000']},'      Vaporpressuredeficit      ')
+
+
+// Create a time series chart showing Vaporpressuredeficit   growth
+print(ui.Chart.image.series({
+  imageCollection: Vaporpressuredeficit ,
+  region: country,
+  reducer: ee.Reducer.mean(),
+  scale: 4638.3   ,
+  xProperty: 'system:time_start' 
+}).setSeriesNames(['Vaporpressuredeficit    Growth '])
+.setOptions({
+  title: 'Vaporpressuredeficit   Growth',
+  hAxis: {title: 'Year'},
+  vAxis: {title: '(kPa)'},
+  interpolateNulls: true,
+  lineWidth: 1,
+  pointSize: 2,
+  curveType: 'function'
+}));
+
+
+
+
+
+
+
+
+
+
+
+
+//---------------------------------------------------------
+// Create a panel to display the legend
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',  // Position the panel in the bottom-right corner
+    padding: '8px 13px'  // Add padding for better appearance
+  }
+});
+
+// Add a title to the legend
+var legendTitle = ui.Label({
+  value: 'Vaporpressuredeficit   Growth',  // Title text
+  style: {
+    fontWeight: 'bold',  // Make the font bold
+    fontSize: '18px',  // Set the font size
+    margin: '0 0 4px 0',  // Margin for spacing
+    padding: '0'  // No padding for the label
+  }
+});
+
+// Add the title to the legend panel
+legend.add(legendTitle);
+
+// Function to create a vertical color bar
+var makeColorBar = function(palette) {
+  var colorBar = ui.Thumbnail({
+    image: ee.Image.pixelLonLat().select(1),  // Use latitude as the image for the gradient
+    params: {
+      bbox: [0, 0, 0.1, 1],  // Create a vertical color bar
+      dimensions: '10x100',  // Set the size of the color bar (10 pixels wide and 100 pixels high)
+      format: 'png',  // Image format
+      min: 0,  // Minimum value for the color bar
+      max: 1,  // Maximum value for the color bar
+      palette: palette,  // Use the provided palette for colors
+    },
+    style: {stretch: 'vertical', margin: '8px 0'}  // Stretch the color bar vertically and add margin
+  });
+  return colorBar;  // Return the created color bar
+};
+
+// Define the magma color palette
+var palette = ['#00007f', '#0000ff', '#007fff', '#00ffff', '#7fff7f', '#ffff00', '#ff7f00', '#ff0000', '#7f0000'] // Colors for the magma palette
+
+// Create labels for the min and max values
+var minLabel = ui.Label({
+  value: '172',  // Label for the maximum value
+  style: {margin: '4px 8px'}  // Add margin for better appearance
+});
+var maxLabel = ui.Label({
+  value: '162',  // Label for the minimum value
+  style: {margin: '4px 8px'}  // Add margin for better appearance
+});
+
+// Add the min label, color bar, and max label to the legend panel in a vertical layout
+legend.add(minLabel);  // Add the min label at the top
+legend.add(makeColorBar(palette));  // Add the color bar in the middle
+legend.add(maxLabel);  // Add the max label at the bottom
+
+// Add the legend panel to the map
+Map.add(legend);
+
+
