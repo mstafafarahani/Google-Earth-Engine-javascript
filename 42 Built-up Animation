@@ -1,0 +1,200 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com
+var geometry = 
+    /* color: #00ff00 */
+    /* shown: false */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[53.14773606283234, 26.14330633018162],
+          [53.14773606283234, 23.57677410349122],
+          [57.30606125814484, 23.57677410349122],
+          [57.30606125814484, 26.14330633018162]]], null, false);
+Map.centerObject(geometry)
+//this code mean if yes soil is natural and if no soil is building
+//Year of the transition from from pervious to impervious. From 34 (year: 1985) to 1 (year: 2018)
+var gaia =ee.Image("Tsinghua/FROM-GLC/GAIA/v10")
+
+var plt = [
+  //http://www.zonums.com/online/color_ramp/
+'0000FF',
+'0019FF',
+'0033FF',
+'004CFF',
+'0066FF',
+'0080FF',
+'00BFFF',
+'00CBF2',
+'00D8E5',
+'00E5D8',
+'00F2CB',
+'00FFBF',
+'00FF80',
+'00FF66',
+'00FF4C',
+'00FF33',
+'00FF19',
+'00FF00',
+'40FF00',
+'59FF00',
+'72FF00',
+'8CFF00',
+'A5FF00',
+'BFFF00',
+'FFFF00',
+'FFEF00',
+'FFDF00',
+'FFCF00',
+'FFBF00',
+'FF8000',
+'FF7000',
+'FF6000',
+'FF5000',
+'FF4000']
+var visParams = {min: 1.0,max: 34.0,palette: plt,}
+Map.addLayer(gaia.clip(geometry),visParams,'image')
+Map.addLayer(geometry)
+var ur_1988 = gaia.updateMask(gaia.gte(31)).set('system:index',"1988");
+var ur_1989 = gaia.updateMask(gaia.gte(30)).set('system:index',"1989");
+var ur_1990 = gaia.updateMask(gaia.gte(29)).set('system:index',"1990");
+var ur_1991 = gaia.updateMask(gaia.gte(28)).set('system:index',"1991");
+var ur_1992 = gaia.updateMask(gaia.gte(27)).set('system:index',"1992");
+var ur_1993 = gaia.updateMask(gaia.gte(26)).set('system:index',"1993");
+var ur_1994 = gaia.updateMask(gaia.gte(25)).set('system:index',"1994");
+var ur_1995 = gaia.updateMask(gaia.gte(24)).set('system:index',"1995");
+var ur_1996 = gaia.updateMask(gaia.gte(23)).set('system:index',"1996");
+var ur_1997 = gaia.updateMask(gaia.gte(22)).set('system:index',"1997");
+var ur_1998 = gaia.updateMask(gaia.gte(21)).set('system:index',"1998");
+var ur_1999 = gaia.updateMask(gaia.gte(20)).set('system:index',"1999");
+var ur_2000 = gaia.updateMask(gaia.gte(19)).set('system:index',"2000");
+var ur_2001 = gaia.updateMask(gaia.gte(18)).set('system:index',"2001");
+var ur_2002 = gaia.updateMask(gaia.gte(17)).set('system:index',"2002");
+var ur_2003 = gaia.updateMask(gaia.gte(16)).set('system:index',"2003");
+var ur_2004 = gaia.updateMask(gaia.gte(15)).set('system:index',"2004");
+var ur_2005 = gaia.updateMask(gaia.gte(14)).set('system:index',"2005");
+var ur_2006 = gaia.updateMask(gaia.gte(13)).set('system:index',"2006");
+var ur_2007 = gaia.updateMask(gaia.gte(12)).set('system:index',"2007");
+var ur_2008 = gaia.updateMask(gaia.gte(11)).set('system:index',"2008");
+var ur_2009 = gaia.updateMask(gaia.gte(10)).set('system:index',"2009");
+var ur_2010 = gaia.updateMask(gaia.gte(9)).set('system:index',"2010");
+var ur_2011 = gaia.updateMask(gaia.gte(8)).set('system:index',"2011");
+var ur_2012 = gaia.updateMask(gaia.gte(7)).set('system:index',"2012");
+var ur_2013 = gaia.updateMask(gaia.gte(6)).set('system:index',"2013");
+var ur_2014 = gaia.updateMask(gaia.gte(5)).set('system:index',"2014");
+var ur_2015 = gaia.updateMask(gaia.gte(4)).set('system:index',"2015");
+var ur_2016 = gaia.updateMask(gaia.gte(3)).set('system:index',"2016");
+var ur_2017 = gaia.updateMask(gaia.gte(2)).set('system:index',"2017");
+var ur_2018 = gaia.updateMask(gaia.gte(1)).set('system:index',"2018");
+
+//
+
+//
+var col = ee.ImageCollection([
+// ur_1985
+// ,ur_1986
+// ,ur_1987
+ur_1988
+,ur_1989
+,ur_1990
+,ur_1991
+,ur_1992
+,ur_1993
+,ur_1994
+,ur_1995
+,ur_1996
+,ur_1997
+,ur_1998
+,ur_1999
+,ur_2000
+,ur_2001
+,ur_2002
+,ur_2003
+,ur_2004
+,ur_2005
+,ur_2006
+,ur_2007
+,ur_2008
+,ur_2009
+,ur_2010
+,ur_2011
+,ur_2012
+,ur_2013
+,ur_2014
+,ur_2015
+,ur_2016
+,ur_2017
+,ur_2018
+])
+
+
+var rgbVis = col.map(function(img) {
+  return img.visualize(visParams);
+});
+// Define an empty image to paint features to.
+var empty = ee.Image().byte();
+
+// Paint country feature edges to the empty image.
+var outline = empty
+  .paint({featureCollection: geometry, color: 1, width: 1})
+  // Convert to an RGB visualization image; set line color to black.
+  .visualize({palette: 'red'});
+
+// Map a blend operation over the collection to overlay the boundary
+// border outline image on all collection images.
+var rgbVisOutline0 = rgbVis.map(function(img) {
+  return img.blend(outline);
+});
+
+var gsw = ee.Image('JRC/GSW1_0/GlobalSurfaceWater');
+var water = gsw.select('occurrence').gt(50).selfMask();
+
+
+var vizWater = {// min: 0,// max: 9000,
+  palette: ['00ffff'],
+  opacity: 0.4
+};
+
+
+var rgbVisOutline = rgbVisOutline0.map(function(img) {
+  return img.blend(water.visualize(vizWater));
+});
+
+var text = require('users/gena/packages:text');
+var annotations = [
+  {
+    position: 'top', offset: '15%', margin: '10%', property: 'system:index', scale: Map.getScale() * 1.5
+  }
+]
+function addLabel(img){
+  return img.set({label:img.get('system:index')});
+}
+function text_f (img) {
+  return text.annotateImage(img, {}, geometry, annotations)
+}
+
+var rgbVisOutlineText = rgbVisOutline
+                            .map(addLabel)
+                            .map(text_f)
+
+
+function appendReverse(col) {
+return col.merge(col.sort('system:index', false));
+}
+
+var basicAnimation = appendReverse(rgbVisOutlineText);
+
+var gifParams = {
+  'region': geometry,//dx.geometry(),//gaia.geometry(),
+  'dimensions': 600,
+  'crs': 'EPSG:4326',
+  'framesPerSecond': 6};
+
+
+
+
+// Render the GIF animation in the console.
+print(ui.Thumbnail(basicAnimation, gifParams));
+// Print the GIF URL to the console.
+print(basicAnimation.getVideoThumbURL(gifParams));
