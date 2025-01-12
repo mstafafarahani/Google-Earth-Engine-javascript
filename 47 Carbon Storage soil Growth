@@ -1,0 +1,82 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com  Happy coding! 🚀
+var geometry = /* color: #999900 */ee.Geometry.Point([10.955904447960831, 52.16300028112802]);
+/*YOu CAN USE city boundary and run this code only for your  city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+YOu CAN USE province boundary and run this code only for your  province
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+//YOu CAN USE country boundary and run this code only for your  country
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,3)
+
+/*
+MODIS product : NPP & GPP
+NPP:Net primary Productivity (net flux of Carbon from the Atmosphere into green plants per unit time)
+GPP: (Gross primary production : NPP + Cellular respiration)
+NPP is available for every year , GPP for every 8 days.
+NPP8(Carbon Storage) = (GPP8 /GPPy)* NPPy   this is fromula 
+i Import the (1) MODIS/006/MOD17A3HGF:Net primary Production Yearly L4 Global 500m and 
+             (2) MODIS/006/MYD17A2H: Gross primary production 8-day L4 Global 500m  into the GEE.
+finally calculate the NPPx 
+*/
+
+var npp = ee.ImageCollection("MODIS/006/MOD17A3HGF") //this is satellite 1
+var gpp = ee.ImageCollection("MODIS/006/MYD17A2H")   //this is satellite 2
+
+
+var startdate = ee.Date.fromYMD(2010,1,1)
+var enddate = ee.Date.fromYMD(2012,12,31)
+
+
+var nppCollection = npp.filterDate(startdate,enddate).filterBounds(geometry).select('Npp')
+var gppCollection = gpp.filterDate(startdate,enddate).filterBounds(geometry).select('Gpp')
+
+
+var myNpp = function(myimg){
+  var d = ee.Date(myimg.get('system:time_start'))
+  var y = d.get('year').toInt()
+  var GPPy = ee.Image(gppCollection.filter(ee.Filter.calendarRange(y,y, 'year')).sum())
+  var NPPy = ee.Image(nppCollection.filter(ee.Filter.calendarRange(y,y, 'year')).mean())
+  var npp8 = myimg.expression('(GGP8/GPPy)*NPPy',//NPP8(Carbon Storage) = (GPP8 /GPPy)* NPPy   this is fromula 
+  {
+    GGP8:myimg,
+    GPPy:GPPy,
+    NPPy:NPPy
+  })
+  return npp8.clip(country).multiply(0.0001).copyProperties(myimg,['system:time_start'])}
+
+
+
+var npp8Collection = ee.ImageCollection(gppCollection.map(myNpp))
+
+
+print(npp8Collection.size())
+Map.addLayer(npp8Collection.mean(),{min:27,max:30 ,palette:['#00007f', '#0000ff', '#007fff', '#00ffff', '#7fff7f', '#ffff00', '#ff7f00', '#ff0000', '#7f0000']},' npp')
+
+
+
+
+// Create a time series chart showing carbon storage growth
+print(ui.Chart.image.series({
+  imageCollection: npp8Collection ,
+  region: country,
+  reducer: ee.Reducer.mean(),
+  scale: 500,
+  xProperty: 'system:time_start' 
+}).setSeriesNames(['Carbon Storage Quality'])
+.setOptions({
+  title: 'Carbon Storage Quality',
+  hAxis: {title: 'Year'},
+  vAxis: {title: '(kg Carbon/m²/year)'},
+  interpolateNulls: true,
+  lineWidth: 1,
+  pointSize: 2,
+  curveType: 'function'
+}));
+
