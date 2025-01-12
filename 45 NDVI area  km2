@@ -1,0 +1,47 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com
+var geometry = 
+    /* color: #0b4a8b */
+    /* shown: false */
+    ee.Geometry.Point([16.541114493821432, 62.36118172362296])
+/*YOu CAN USE city boundary  ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+YOu CAN USE province boundary 
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+//YOu CAN USE coountry boundary 
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,3)
+
+  
+var NDVI = ee.ImageCollection("MODIS/061/MOD13Q1").select('NDVI').filterBounds(country).filterDate('2010-09-10','2023-9-20')
+var NDVI = NDVI.map(function(img){
+  return img.clip(country).multiply(0.0001).subtract(0).add(0).copyProperties(img, img.propertyNames())})//['system:index', 'system:time_start']
+  
+
+var ndvi_area = NDVI.map(function(img){
+  var thr = img.gte(0.3)
+  var mask = thr.updateMask(thr)
+  var area = mask.multiply(ee.Image.pixelArea().divide(1e6))//(1 m2) for (km2 1e6) and (Hectares 1e4)
+  return area.copyProperties(img, img.propertyNames())
+})
+print(ndvi_area.size())
+print((ui.Chart.image.series(ndvi_area,country , ee.Reducer.mean(),250,'system:time_start')).setOptions({title:'NDVI area km2',interpolateNulls:true,lineWidth:1,pointSize:2,curveType:'function',vAxis:{title: ('Area km2')}}))
+Map.addLayer(NDVI.mean(),{min:0.1027195652173913,max:0.780571739130435,palette:['ffffff', 'ce7e45', 'df923d', 'f1b555', 'fcd163', '99b718', '74a901','66a000', '529400', '3e8601', '207401', '056201', '004c00', '023b01','012e01', '011d01', '011301']},'NDVI unit:km2')
+
+
+var a = ndvi_area.map(function(image){
+  return image.clip(country)
+})
+// Define arguments for the getFilmstripThumbURL function parameters.
+var filmArgs = {dimensions: 650,framesPerSecond: 7,region: geometry,crs: 'EPSG:3857',min: -40.0,max: 35.0,palette: ["df923d","056201"]}
+print(ui.Thumbnail(a.limit(68) , filmArgs))
+// Convert the image data to RGB visualization images.
+// The clip and unmask combination sets ocean pixels to black.
+
+
