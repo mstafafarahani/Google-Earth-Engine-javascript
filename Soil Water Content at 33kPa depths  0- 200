@@ -1,0 +1,116 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com  Happy coding! 🚀
+var geometry = 
+    /* color: #98ff00 */
+    /* shown: false */
+    ee.Geometry.Point([9.965285622167572, 32.715142492965825]);
+/*YOu CAN USE city boundary and run this code only for your  city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+
+
+YOu CAN USE province boundary and run this code only for your  province
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+
+
+//YOu CAN USE country boundary and run this code only for your  country
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,3)
+//Soil Water Content at 33kPa (Field Capacity) 0-200 1950-2018 
+//Soil Water between 0 - 52.974 in x
+//unit:percent %
+function soil(id, band, name){
+  var image = ee.Image(id).select(band)
+  Map.addLayer(image.clip(country),[],name,false)
+  print(ui.Chart.image.histogram(image, country, 250))
+  var stat = image.reduceRegion({reducer: ee.Reducer.mean().combine({reducer2: ee.Reducer.minMax(), sharedInputs: true}),
+  geometry: country, scale: 250});
+  print('statistical information for '+name,stat)
+  Export.image.toDrive({
+  image: image.clip(country),
+  description: name,
+  scale: 250,
+  region: country,
+  crs: image.getInfo().crs,
+  folder: 'test'
+  })
+  return image
+  }
+var Carbon  = soil("OpenLandMap/SOL/SOL_WATERCONTENT-33KPA_USDA-4B1C_M/v01", 'b0', 'Soil Water Content at 33kPa 0 cm depth')
+var Carbon  = soil("OpenLandMap/SOL/SOL_WATERCONTENT-33KPA_USDA-4B1C_M/v01", 'b10', 'Soil Water Content at 33kPa 10 cm depth')
+var Carbon  = soil("OpenLandMap/SOL/SOL_WATERCONTENT-33KPA_USDA-4B1C_M/v01", 'b30', 'Soil Water Content at 33kPa 30 cm depth')
+var Carbon  = soil("OpenLandMap/SOL/SOL_WATERCONTENT-33KPA_USDA-4B1C_M/v01", 'b60', 'Soil Water Content at 33kPa 60 cm depth')
+var Carbon  = soil("OpenLandMap/SOL/SOL_WATERCONTENT-33KPA_USDA-4B1C_M/v01", 'b100', 'Soil Water Content at 33kPa 100 cm depth')
+var Carbon  = soil("OpenLandMap/SOL/SOL_WATERCONTENT-33KPA_USDA-4B1C_M/v01", 'b200', 'Soil Water Content at 33kPa 200 cm depth')
+var dataset = ee.Image('OpenLandMap/SOL/SOL_WATERCONTENT-33KPA_USDA-4B1C_M/v01').clip(country)
+print((ui.Chart.image.series(dataset,country,ee.Reducer.mean(),250,'system:time_start')).setOptions({title:'Soil Water Content at 33kPa (Field Capacity)  0-200 1950',interpolateNulls:true,lineWidth:1,pointSize:2,curveType:'function',vAxis:{title: ('اطلاعات آماری برای محتوای آب خاک در 33 کیلو پاسکال (ظرفیت مزرعه)')}}))
+var vis = {bands: ['b0'],min:20,max:34,palette: ['d29642','eec764','b4ee87','32eeeb','0c78ee','2601b7']}
+Map.addLayer(dataset,vis,'Soil Water Content at 33kPa 0 cm depth')
+var vis = {bands: ['b10'],min:19,max:33,palette: ['d29642','eec764','b4ee87','32eeeb','0c78ee','2601b7']}
+Map.addLayer(dataset,vis,'Soil Water Content at 33kPa 10 cm depth')
+var vis = {bands: ['b30'],min:19,max:31,palette: ['d29642','eec764','b4ee87','32eeeb','0c78ee','2601b7']}
+Map.addLayer(dataset,vis,'Soil Water Content at 33kPa 30 cm depth')
+var vis = {bands: ['b60'],min:18,max:30,palette: ['d29642','eec764','b4ee87','32eeeb','0c78ee','2601b7']}
+Map.addLayer(dataset,vis,'Soil Water Content at 33kPa 60 cm depth')
+var vis = {bands: ['b100'],min:16,max:29,palette: ['d29642','eec764','b4ee87','32eeeb','0c78ee','2601b7']}
+Map.addLayer(dataset,vis,'Soil Water Content at 33kPa 100 cm depth')
+var vis = {bands: ['b200'],min:16,max:34,palette: ['d29642','eec764','b4ee87','32eeeb','0c78ee','2601b7']}
+Map.addLayer(dataset,vis,'Soil Water Content at 33kPa 200 cm depth')
+//  the palette and labels
+var palette = ['d29642','eec764','b4ee87','32eeeb','0c78ee','2601b7']
+var labels = ['Minimal:19 %at 33kPa','Suboptimal','Moderate','Satisfactory','Optimal','Maximal:33 %at 33kPa']
+// Create the legend
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',
+    padding: '8px 15px'
+  }
+});
+
+// Title for the legend
+var legendTitle = ui.Label({
+  value: 'Soil Water Content at 33kPa depths 0/10/30/60/100/200cm - USA - 2024',
+  style: {
+    fontWeight: 'bold',
+    fontSize: '19px',
+    margin: '0 0 10px 0',
+    padding: '0'
+  }
+});
+legend.add(legendTitle);
+
+// Function to create a legend item
+var makeLegendItem = function(color, name) {
+  var colorBox = ui.Label({
+    style: {
+      backgroundColor: color,
+      padding: '8px',
+      margin: '0 0 4px 0'
+    }
+  });
+
+  var description = ui.Label({
+    value: name,
+    style: {
+      margin: '0 0 4px 6px'
+    }
+  });
+
+  return ui.Panel({
+    widgets: [colorBox, description],
+    layout: ui.Panel.Layout.Flow('horizontal')
+  });
+};
+
+// Add each color and label to the legend
+for (var i = 0; i < palette.length; i++) {
+  legend.add(makeLegendItem(palette[i], labels[i]));
+}
+
+// Add the legend to the map
+Map.add(legend);
