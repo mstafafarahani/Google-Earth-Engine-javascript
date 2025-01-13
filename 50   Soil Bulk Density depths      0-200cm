@@ -1,0 +1,139 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com  Happy coding! 🚀
+var geometry = 
+    /* color: #ff0000 */
+    /* shown: false */
+    ee.Geometry.Point([-8.249896258459453, 53.12276781997494]);
+/*YOu CAN USE city boundary and run this code only for your  city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+
+
+YOu CAN USE province boundary and run this code only for your  province
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+
+
+//YOu CAN USE country boundary and run this code only for your  country
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,3)
+
+
+
+
+//Soil Bulk Density 0-200 1950-2018 
+//Soil bulk density  between 5 - 185 in x10 kg/m3
+Map.centerObject(country)
+
+
+
+
+function soil(id, band, name){
+  var image = ee.Image(id).select(band)
+  Map.addLayer(image.clip(country),[],name,false)
+  print(ui.Chart.image.histogram(image, country, 250))
+  var stat = image.reduceRegion({reducer: ee.Reducer.mean().combine({reducer2: ee.Reducer.minMax(), sharedInputs: true}),
+  geometry: country, scale: 250});
+  print('statistical information for '+name,stat)
+  Export.image.toDrive({
+  image: image.clip(country),
+  description: name,
+  scale: 250,
+  region: country,
+  crs: image.getInfo().crs,
+  folder: 'test'
+  })
+  return image
+  }
+  
+  
+  
+  
+  
+var Carbon  = soil("OpenLandMap/SOL/SOL_BULKDENS-FINEEARTH_USDA-4A1H_M/v02", 'b0', 'Soil bulk density at 0 cm depth in x 10 kg / m3')
+var Carbon  = soil("OpenLandMap/SOL/SOL_BULKDENS-FINEEARTH_USDA-4A1H_M/v02", 'b10', 'Soil bulk density at 10 cm depth in x 10 kg / m3')
+var Carbon  = soil("OpenLandMap/SOL/SOL_BULKDENS-FINEEARTH_USDA-4A1H_M/v02", 'b30', 'Soil bulk density at 30 cm depth in x 10 kg / m3')
+var Carbon  = soil("OpenLandMap/SOL/SOL_BULKDENS-FINEEARTH_USDA-4A1H_M/v02", 'b60', 'Soil bulk density at 60 cm depth in x 10 kg / m3')
+var Carbon  = soil("OpenLandMap/SOL/SOL_BULKDENS-FINEEARTH_USDA-4A1H_M/v02", 'b100', 'Soil bulk density at 100 cm depth in x 10 kg / m3')
+var Carbon  = soil("OpenLandMap/SOL/SOL_BULKDENS-FINEEARTH_USDA-4A1H_M/v02", 'b200', 'Soil bulk density at 200 cm depth in x 10 kg / m3')
+var dataset = ee.Image('OpenLandMap/SOL/SOL_BULKDENS-FINEEARTH_USDA-4A1H_M/v02').clip(country)
+
+
+
+
+
+print((ui.Chart.image.series(dataset,country,ee.Reducer.mean(),250,'system:time_start')).setOptions({title:'Soil bulk density 0-200 1950',interpolateNulls:true,lineWidth:1,pointSize:2,curveType:'function',vAxis:{title: ('in x 10 kg / m3')}}))
+
+
+
+
+var vis = {bands: ['b0'],min:132.6,max:161.4,palette: ['5e3c99', 'b2abd2', 'f7e0b2', 'fdb863', 'e63b01']}
+Map.addLayer(dataset,vis,'Soil bulk density at 0 cm depth in x 10 kg / m3')
+var vis = {bands: ['b10'],min:135.6,max:164.4,palette: ['5e3c99', 'b2abd2', 'f7e0b2', 'fdb863', 'e63b01']}
+Map.addLayer(dataset,vis,'Soil bulk density at 10 cm depth in x 10 kg / m3')
+var vis = {bands: ['b30'],min:145.5,max:169.5,palette: ['5e3c99', 'b2abd2', 'f7e0b2', 'fdb863', 'e63b01']}
+Map.addLayer(dataset,vis,'Soil bulk density at 30 cm depth in x 10 kg / m3')
+var vis = {bands: ['b60'],min:151.52,max:176.48,palette: ['5e3c99', 'b2abd2', 'f7e0b2', 'fdb863', 'e63b01']}
+Map.addLayer(dataset,vis,'Soil bulk density at 60 cm depth in x 10 kg / m3')
+var vis = {bands: ['b100'],min:156.48,max:179.52,palette: ['5e3c99', 'b2abd2', 'f7e0b2', 'fdb863', 'e63b01']}
+Map.addLayer(dataset,vis,'Soil bulk density at 100 cm depth in x 10 kg / m3')
+var vis = {bands: ['b200'],min:158.5,max:182.5,palette: ['5e3c99', 'b2abd2', 'f7e0b2', 'fdb863', 'e63b01']}
+Map.addLayer(dataset,vis,'Soil bulk density at 200 cm depth in x 10 kg / m3')
+
+// Define the palette and labels
+var palette = ['5e3c99', 'b2abd2', 'f7e0b2', 'fdb863', 'e63b01' ]
+var labels = ['Minimal:158 x 10kg/m3','Moderate','Satisfactory','Optimal','Maximal:182 x 10kg/m3']
+// Create the legend
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',
+    padding: '8px 15px'
+  }
+});
+
+// Title for the legend
+var legendTitle = ui.Label({
+  value: 'Soil bulk density depths 0/10/30/60/100/200cm - Brazil - 2024',
+  style: {
+    fontWeight: 'bold',
+    fontSize: '19px',
+    margin: '0 0 10px 0',
+    padding: '0'
+  }
+});
+legend.add(legendTitle);
+
+// Function to create a legend item
+var makeLegendItem = function(color, name) {
+  var colorBox = ui.Label({
+    style: {
+      backgroundColor: color,
+      padding: '8px',
+      margin: '0 0 4px 0'
+    }
+  });
+
+  var description = ui.Label({
+    value: name,
+    style: {
+      margin: '0 0 4px 6px'
+    }
+  });
+
+  return ui.Panel({
+    widgets: [colorBox, description],
+    layout: ui.Panel.Layout.Flow('horizontal')
+  });
+};
+
+// Add each color and label to the legend
+for (var i = 0; i < palette.length; i++) {
+  legend.add(makeLegendItem(palette[i], labels[i]));
+}
+
+// Add the legend to the map
+Map.add(legend);
