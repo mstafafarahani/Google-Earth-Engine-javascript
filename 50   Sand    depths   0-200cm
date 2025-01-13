@@ -1,0 +1,142 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com  Happy coding! 🚀
+var geometry = 
+    /* color: #00ff00 */
+    /* shown: false */
+    ee.Geometry.Point([6.358482312933917, 52.38728229010052]);
+/*YOu CAN USE city boundary and run this code only for your  city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+
+
+YOu CAN USE province boundary and run this code only for your  province
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+
+
+//YOu CAN USE country boundary and run this code only for your  country
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,3)
+
+
+
+
+
+
+
+
+
+//Sand 0-200 1950-2018
+//Sand between 1 - 100 in x% (kg / kg)
+
+function soil(id, band, name){
+  var image = ee.Image(id).select(band)
+  Map.addLayer(image.clip(country),[],name,false)
+  print(ui.Chart.image.histogram(image, country, 250))
+  var stat = image.reduceRegion({reducer: ee.Reducer.mean().combine({reducer2: ee.Reducer.minMax(), sharedInputs: true}),
+  geometry: country, scale: 250});
+  print('statistical information for '+name,stat)
+  Export.image.toDrive({
+  image: image.clip(country),
+  description: name,
+  scale: 250,
+  region: country,
+  crs: image.getInfo().crs,
+  folder: 'test'
+  })
+  return image
+  }
+  
+  
+  
+var Carbon  = soil("OpenLandMap/SOL/SOL_SAND-WFRACTION_USDA-3A1A1A_M/v02", 'b0', 'Sand content in % (kg / kg) 0 cm depth')
+var Carbon  = soil("OpenLandMap/SOL/SOL_SAND-WFRACTION_USDA-3A1A1A_M/v02", 'b10', 'Sand content in % (kg / kg) 10 cm depth')
+var Carbon  = soil("OpenLandMap/SOL/SOL_SAND-WFRACTION_USDA-3A1A1A_M/v02", 'b30', 'Sand content in % (kg / kg) 30 cm depth')
+var Carbon  = soil("OpenLandMap/SOL/SOL_SAND-WFRACTION_USDA-3A1A1A_M/v02", 'b60', 'Sand content in % (kg / kg) 60 cm depth')
+var Carbon  = soil("OpenLandMap/SOL/SOL_SAND-WFRACTION_USDA-3A1A1A_M/v02", 'b100', 'Sand content in % (kg / kg) 100 cm depth')
+var Carbon  = soil("OpenLandMap/SOL/SOL_SAND-WFRACTION_USDA-3A1A1A_M/v02", 'b200', 'Sand content in % (kg / kg) 200 cm depth')
+
+
+
+var dataset = ee.Image('OpenLandMap/SOL/SOL_SAND-WFRACTION_USDA-3A1A1A_M/v02').clip(country)
+print((ui.Chart.image.series(dataset,country,ee.Reducer.mean(),250,'system:time_start')).setOptions({title:'Sand content  0-200 1950',interpolateNulls:true,lineWidth:1,pointSize:2,curveType:'function',vAxis:{title: ('Sand content in % (kg / kg)')}}))
+
+
+
+
+var vis = {bands: ['b0'],min:12,max:60,palette: ['ffff00', 'f8f806', 'f1f10c', 'ebeb13', 'e4e419', 'dddd20','d7d726', 'd0d02d', 'caca33', 'c3c33a', 'bcbc41', 'b6b647','b0b04e', 'a9a954', 'a3a35a', '9c9c61', '959568', '8f8f6e','898975', '82827b', '7b7b82', '757589', '6e6e8f', '686895','61619c', '5a5aa3', '5454a9', '4d4db0', '4747b6', '4141bc','3a3ac3', '3333ca', '2d2dd0', '2626d7', '2020dd', '1919e4','1212eb', '0c0cf1', '0606f8', '0000ff']}
+Map.addLayer(dataset,vis,'Sand content in % (kg / kg) 0 cm depth')
+
+var vis = {bands: ['b10'],min:11,max:60,palette: ['ffff00', 'f8f806', 'f1f10c', 'ebeb13', 'e4e419', 'dddd20','d7d726', 'd0d02d', 'caca33', 'c3c33a', 'bcbc41', 'b6b647','b0b04e', 'a9a954', 'a3a35a', '9c9c61', '959568', '8f8f6e','898975', '82827b', '7b7b82', '757589', '6e6e8f', '686895','61619c', '5a5aa3', '5454a9', '4d4db0', '4747b6', '4141bc','3a3ac3', '3333ca', '2d2dd0', '2626d7', '2020dd', '1919e4','1212eb', '0c0cf1', '0606f8', '0000ff']}
+Map.addLayer(dataset,vis,'Sand content in % (kg / kg) 10 cm depth')
+
+var vis = {bands: ['b30'],min:11,max:58,palette: ['ffff00', 'f8f806', 'f1f10c', 'ebeb13', 'e4e419', 'dddd20','d7d726', 'd0d02d', 'caca33', 'c3c33a', 'bcbc41', 'b6b647','b0b04e', 'a9a954', 'a3a35a', '9c9c61', '959568', '8f8f6e','898975', '82827b', '7b7b82', '757589', '6e6e8f', '686895','61619c', '5a5aa3', '5454a9', '4d4db0', '4747b6', '4141bc','3a3ac3', '3333ca', '2d2dd0', '2626d7', '2020dd', '1919e4','1212eb', '0c0cf1', '0606f8', '0000ff']}
+Map.addLayer(dataset,vis,'Sand content in % (kg / kg) 30 cm depth')
+
+var vis = {bands: ['b60'],min:10,max:57,palette: ['ffff00', 'f8f806', 'f1f10c', 'ebeb13', 'e4e419', 'dddd20','d7d726', 'd0d02d', 'caca33', 'c3c33a', 'bcbc41', 'b6b647','b0b04e', 'a9a954', 'a3a35a', '9c9c61', '959568', '8f8f6e','898975', '82827b', '7b7b82', '757589', '6e6e8f', '686895','61619c', '5a5aa3', '5454a9', '4d4db0', '4747b6', '4141bc','3a3ac3', '3333ca', '2d2dd0', '2626d7', '2020dd', '1919e4','1212eb', '0c0cf1', '0606f8', '0000ff']}
+Map.addLayer(dataset,vis,'Sand content in % (kg / kg) 60 cm depth')
+
+var vis = {bands: ['b100'],min:11.92,max:56.08,palette: ['ffff00', 'f8f806', 'f1f10c', 'ebeb13', 'e4e419', 'dddd20','d7d726', 'd0d02d', 'caca33', 'c3c33a', 'bcbc41', 'b6b647','b0b04e', 'a9a954', 'a3a35a', '9c9c61', '959568', '8f8f6e','898975', '82827b', '7b7b82', '757589', '6e6e8f', '686895','61619c', '5a5aa3', '5454a9', '4d4db0', '4747b6', '4141bc','3a3ac3', '3333ca', '2d2dd0', '2626d7', '2020dd', '1919e4','1212eb', '0c0cf1', '0606f8', '0000ff']}
+Map.addLayer(dataset,vis,'Sand content in % (kg / kg) 100 cm depth')
+
+var vis = {bands: ['b200'],min:16,max:54,palette: ['ffff00', 'f8f806', 'f1f10c', 'ebeb13', 'e4e419', 'dddd20','d7d726', 'd0d02d', 'caca33', 'c3c33a', 'bcbc41', 'b6b647','b0b04e', 'a9a954', 'a3a35a', '9c9c61', '959568', '8f8f6e','898975', '82827b', '7b7b82', '757589', '6e6e8f', '686895','61619c', '5a5aa3', '5454a9', '4d4db0', '4747b6', '4141bc','3a3ac3', '3333ca', '2d2dd0', '2626d7', '2020dd', '1919e4','1212eb', '0c0cf1', '0606f8', '0000ff']}
+Map.addLayer(dataset,vis,'Sand content in % (kg / kg) 200 cm depth')
+
+
+// Define the palette and labels
+var palette = ['ffff00','d7d726','959568','7b7b82','61619c','2d2dd0','0000ff' ]
+var labels = ['Minimal:37 in % (kg / kg)','Suboptimal','Moderate','Satisfactory','Optimal','Superior','Maximal:93 in % (kg / kg)']
+// Create the legend
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',
+    padding: '8px 15px'
+  }
+});
+
+// Title for the legend
+var legendTitle = ui.Label({
+  value: 'Soil Sand depths 0/10/30/60/100/200cm - Algeria - 2024',
+  style: {
+    fontWeight: 'bold',
+    fontSize: '19px',
+    margin: '0 0 10px 0',
+    padding: '0'
+  }
+});
+legend.add(legendTitle);
+
+// Function to create a legend item
+var makeLegendItem = function(color, name) {
+  var colorBox = ui.Label({
+    style: {
+      backgroundColor: color,
+      padding: '8px',
+      margin: '0 0 4px 0'
+    }
+  });
+
+  var description = ui.Label({
+    value: name,
+    style: {
+      margin: '0 0 4px 6px'
+    }
+  });
+
+  return ui.Panel({
+    widgets: [colorBox, description],
+    layout: ui.Panel.Layout.Flow('horizontal')
+  });
+};
+
+// Add each color and label to the legend
+for (var i = 0; i < palette.length; i++) {
+  legend.add(makeLegendItem(palette[i], labels[i]));
+}
+
+// Add the legend to the map
+Map.add(legend);
