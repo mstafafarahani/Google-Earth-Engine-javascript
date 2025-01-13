@@ -2,7 +2,7 @@
 var geometry = 
     /* color: #98ff00 */
     /* shown: false */
-    ee.Geometry.Point([9.965285622167572, 32.715142492965825]);
+    ee.Geometry.Point([54.59938842058107, 23.543767423529832]);
 /*YOu CAN USE city boundary and run this code only for your  city ,
 var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
 Map.addLayer(city)
@@ -48,7 +48,7 @@ var Carbon  = soil("OpenLandMap/SOL/SOL_WATERCONTENT-33KPA_USDA-4B1C_M/v01", 'b6
 var Carbon  = soil("OpenLandMap/SOL/SOL_WATERCONTENT-33KPA_USDA-4B1C_M/v01", 'b100', 'Soil Water Content at 33kPa 100 cm depth')
 var Carbon  = soil("OpenLandMap/SOL/SOL_WATERCONTENT-33KPA_USDA-4B1C_M/v01", 'b200', 'Soil Water Content at 33kPa 200 cm depth')
 var dataset = ee.Image('OpenLandMap/SOL/SOL_WATERCONTENT-33KPA_USDA-4B1C_M/v01').clip(country)
-print((ui.Chart.image.series(dataset,country,ee.Reducer.mean(),250,'system:time_start')).setOptions({title:'Soil Water Content at 33kPa (Field Capacity)  0-200 1950',interpolateNulls:true,lineWidth:1,pointSize:2,curveType:'function',vAxis:{title: ('اطلاعات آماری برای محتوای آب خاک در 33 کیلو پاسکال (ظرفیت مزرعه)')}}))
+print((ui.Chart.image.series(dataset,country,ee.Reducer.mean(),250,'system:time_start')).setOptions({title:'Soil Water Content at 33kPa (Field Capacity)  0-200 1950',interpolateNulls:true,lineWidth:1,pointSize:2,curveType:'function',vAxis:{title: ('Soil Water Content at 33kPa')}}))
 var vis = {bands: ['b0'],min:20,max:34,palette: ['d29642','eec764','b4ee87','32eeeb','0c78ee','2601b7']}
 Map.addLayer(dataset,vis,'Soil Water Content at 33kPa 0 cm depth')
 var vis = {bands: ['b10'],min:19,max:33,palette: ['d29642','eec764','b4ee87','32eeeb','0c78ee','2601b7']}
@@ -74,7 +74,7 @@ var legend = ui.Panel({
 
 // Title for the legend
 var legendTitle = ui.Label({
-  value: 'Soil Water Content at 33kPa depths 0/10/30/60/100/200cm - USA - 2024',
+  value: 'Soil Water Content at 33kPa depths 0/10/30/60/100/200cm - 2024',
   style: {
     fontWeight: 'bold',
     fontSize: '19px',
