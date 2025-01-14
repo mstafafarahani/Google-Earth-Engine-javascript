@@ -1,0 +1,132 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com  Happy coding! 🚀
+var geometry = 
+    /* color: #0000ff */
+    /* shown: false */
+    ee.Geometry.Point([19.147545059632204, 42.926842513334336]);
+/*YOu CAN USE city boundary and run this code only for your  city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+
+
+YOu CAN USE province boundary and run this code only for your  province
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+
+
+//YOu CAN USE country boundary and run this code only for your  country
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,3)
+
+
+
+
+
+
+
+//unit carbon soil Units:  5g/kg min:0 ,max:120
+// Select the country For plotting multiple country, we need a FeatureCollection
+function soil(id, band, name){
+  var image = ee.Image(id).select(band)
+  Map.addLayer(image.clip(country),[],name,false)
+  print(ui.Chart.image.histogram(image, country, 250))
+  var stat = image.reduceRegion({reducer: ee.Reducer.mean().combine({reducer2: ee.Reducer.minMax(), sharedInputs: true}),
+  geometry: country, scale: 250});
+  print('statistical information for '+name,stat)
+  
+  
+  
+  Export.image.toDrive({
+  image: image.clip(country),
+  description: name,
+  scale: 250,
+  region: country,
+  crs: image.getInfo().crs,
+  folder: 'test'
+  })
+  return image
+  }
+
+var Carbon  = soil("OpenLandMap/SOL/SOL_ORGANIC-CARBON_USDA-6A1C_M/v02", 'b0', 'Carbon 0')//Carbon 0
+var Carbon  = soil("OpenLandMap/SOL/SOL_ORGANIC-CARBON_USDA-6A1C_M/v02", 'b10', 'Carbon 10')//Carbon 10
+var Carbon  = soil("OpenLandMap/SOL/SOL_ORGANIC-CARBON_USDA-6A1C_M/v02", 'b30', 'Carbon 30')//Carbon 30
+var Carbon  = soil("OpenLandMap/SOL/SOL_ORGANIC-CARBON_USDA-6A1C_M/v02", 'b60', 'Carbon 60')//Carbon 60
+var Carbon  = soil("OpenLandMap/SOL/SOL_ORGANIC-CARBON_USDA-6A1C_M/v02", 'b100', 'Carbon 100')//Carbon 100
+var Carbon  = soil("OpenLandMap/SOL/SOL_ORGANIC-CARBON_USDA-6A1C_M/v02", 'b200', 'Carbon 200')//Carbon 200
+
+
+var dataset = ee.Image('OpenLandMap/SOL/SOL_ORGANIC-CARBON_USDA-6A1C_M/v02').clip(country)
+print((ui.Chart.image.series(dataset,country,ee.Reducer.mean(),250,'system:time_start')).setOptions({title:'Carbon 0-200 1950',interpolateNulls:true,lineWidth:1,pointSize:2,curveType:'function',vAxis:{title: ('g/kg')}}))
+
+
+
+var vis = {bands: ['b0'],min: 3.46,max: 25.54,palette: ['ffffa0','f7fcb9','d9f0a3','addd8e','78c679','41ab5d','238443','005b29','004b29','012b13','00120b']}
+Map.addLayer(dataset,vis,'Soil organic carbon 0 cm depth')
+var vis = {bands: ['b10'],min: 3.34,max:19.66,palette: ['ffffa0','f7fcb9','d9f0a3','addd8e','78c679','41ab5d','238443','005b29','004b29','012b13','00120b']}
+Map.addLayer(dataset,vis,'Soil organic carbon 10cm depth')
+var vis = {bands: ['b30'],min: 2.16,max:9.84,palette: ['ffffa0','f7fcb9','d9f0a3','addd8e','78c679','41ab5d','238443','005b29','004b29','012b13','00120b']}
+Map.addLayer(dataset,vis,'Soil organic carbon 30 cm depth')
+var vis = {bands: ['b60'],min:1.1,max:5.9,palette: ['ffffa0','f7fcb9','d9f0a3','addd8e','78c679','41ab5d','238443','005b29','004b29','012b13','00120b']}
+Map.addLayer(dataset,vis,'Soil organic carbon 60 cm depth')
+var vis = {bands: ['b100'],min:0.1,max:4.9,palette: ['ffffa0','f7fcb9','d9f0a3','addd8e','78c679','41ab5d','238443','005b29','004b29','012b13','00120b']}
+Map.addLayer(dataset,vis,'Soil organic carbon 100 cm depth')
+var vis = {bands: ['b200'],min:0.1,max:4.9,palette: ['ffffa0','f7fcb9','d9f0a3','addd8e','78c679','41ab5d','238443','005b29','004b29','012b13','00120b']}
+Map.addLayer(dataset,vis,'Soil organic carbon 200 cm depth')
+
+// Define the palette and labels
+var palette = ['ffffa0','d9f0a3','addd8e','78c679','238443','004b29','00120b' ]
+var labels = ['Minimal:1    5g/kg','Suboptimal','Moderate','Satisfactory','Optimal','Superior','Maximal:4.9   5g/kg']
+// Create the legend
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',
+    padding: '8px 15px'
+  }
+});
+
+// Title for the legend
+var legendTitle = ui.Label({
+  value: 'Soil organic carbon depths 0/10/30/60/100/200cm - Russia - 2024',
+  style: {
+    fontWeight: 'bold',
+    fontSize: '19px',
+    margin: '0 0 10px 0',
+    padding: '0'
+  }
+});
+legend.add(legendTitle);
+
+// Function to create a legend item
+var makeLegendItem = function(color, name) {
+  var colorBox = ui.Label({
+    style: {
+      backgroundColor: color,
+      padding: '8px',
+      margin: '0 0 4px 0'
+    }
+  });
+
+  var description = ui.Label({
+    value: name,
+    style: {
+      margin: '0 0 4px 6px'
+    }
+  });
+
+  return ui.Panel({
+    widgets: [colorBox, description],
+    layout: ui.Panel.Layout.Flow('horizontal')
+  });
+};
+
+// Add each color and label to the legend
+for (var i = 0; i < palette.length; i++) {
+  legend.add(makeLegendItem(palette[i], labels[i]));
+}
+
+// Add the legend to the map
+Map.add(legend);
