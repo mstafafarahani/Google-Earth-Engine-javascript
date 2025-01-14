@@ -1,0 +1,151 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com  Happy coding! 🚀
+var geometry = 
+    /* color: #ffc82d */
+    /* shown: false */
+    ee.Geometry.Point([14.106460830597127, 46.23738471713377]);
+/*YOu CAN USE city boundary and run this code only for your  city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+
+
+YOu CAN USE province boundary and run this code only for your  province
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+
+
+//YOu CAN USE country boundary and run this code only for your  country
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,3)
+
+
+
+
+
+
+
+// PH 0-200 1950-2018 between 4.2-11
+Map.centerObject(country)
+
+function soil(id, band, name){
+  var image = ee.Image(id).select(band).divide(10)
+  Map.addLayer(image.clip(country),[],name,false)
+  print(ui.Chart.image.histogram(image, country, 250))
+  var stat = image.reduceRegion({reducer: ee.Reducer.median().combine({reducer2: ee.Reducer.minMax(), sharedInputs: true}),
+  geometry: country, scale: 250});
+  print('statistical information for '+name,stat)
+ 
+ 
+  Export.image.toDrive({
+  image: image.clip(country),
+  description: name,
+  scale: 250,
+  region: country,
+  crs: image.getInfo().crs,
+  folder: 'test'
+  })
+  return image
+  }
+  
+  
+  
+  
+  
+var ph = soil("OpenLandMap/SOL/SOL_PH-H2O_USDA-4C1A2A_M/v02", 'b0', 'ph0')//ph0
+var ph = soil("OpenLandMap/SOL/SOL_PH-H2O_USDA-4C1A2A_M/v02", 'b10', 'ph10')//ph10
+var ph = soil("OpenLandMap/SOL/SOL_PH-H2O_USDA-4C1A2A_M/v02", 'b30', 'ph30')//ph30
+var ph = soil("OpenLandMap/SOL/SOL_PH-H2O_USDA-4C1A2A_M/v02", 'b60', 'ph60')//ph60
+var ph = soil("OpenLandMap/SOL/SOL_PH-H2O_USDA-4C1A2A_M/v02", 'b100', 'ph100')//ph100
+var ph = soil("OpenLandMap/SOL/SOL_PH-H2O_USDA-4C1A2A_M/v02", 'b200', 'ph200')//ph200
+
+
+
+
+
+var dataset = ee.Image('OpenLandMap/SOL/SOL_PH-H2O_USDA-4C1A2A_M/v02').clip(country).divide(10)
+print((ui.Chart.image.series(dataset,country,ee.Reducer.mean(),250,'system:time_start')).setOptions({title:'pH soil 0-200 depths 1950',interpolateNulls:true,lineWidth:1,pointSize:2,curveType:'function',vAxis:{title: ('42-110')}}))
+ 
+ 
+ 
+ 
+ 
+vis = {bands: ['b0'],min:5.2,max: 6.8,palette: ['ff0000', 'ff1c00', 'ff3900', 'ff5500', 'ff7100', 'ff8e00','ffaa00', 'ffc600', 'ffe200', 'ffff00', 'e3ff00', 'c7ff00','aaff00', '8eff00', '72ff00', '55ff00', '39ff00', '1dff00','01ff00', '00ff1c', '00ff38', '00ff54', '00ff71', '00ff8d','00ffa9', '00ffc6', '00ffe2', '00fffe', '00e3ff', '00c7ff','00abff', '008fff', '0072ff', '0056ff', '003aff', '001dff','0001ff', '1b00ff', '3800ff', '5400ff',]}
+Map.addLayer(dataset,vis,'Soil pH  0 cm depth')
+var vis = {bands: ['b10'],min:5.542,max: 6.8,palette: ['ff0000', 'ff1c00', 'ff3900', 'ff5500', 'ff7100', 'ff8e00','ffaa00', 'ffc600', 'ffe200', 'ffff00', 'e3ff00', 'c7ff00','aaff00', '8eff00', '72ff00', '55ff00', '39ff00', '1dff00','01ff00', '00ff1c', '00ff38', '00ff54', '00ff71', '00ff8d','00ffa9', '00ffc6', '00ffe2', '00fffe', '00e3ff', '00c7ff','00abff', '008fff', '0072ff', '0056ff', '003aff', '001dff','0001ff', '1b00ff', '3800ff', '5400ff']}
+Map.addLayer(dataset,vis,'Soil pH  10cm depth')
+var vis = {bands: ['b30'],min:5.2,max: 6.8,palette: ['ff0000', 'ff1c00', 'ff3900', 'ff5500', 'ff7100', 'ff8e00','ffaa00', 'ffc600', 'ffe200', 'ffff00', 'e3ff00', 'c7ff00','aaff00', '8eff00', '72ff00', '55ff00', '39ff00', '1dff00','01ff00', '00ff1c', '00ff38', '00ff54', '00ff71', '00ff8d','00ffa9', '00ffc6', '00ffe2', '00fffe', '00e3ff', '00c7ff','00abff', '008fff', '0072ff', '0056ff', '003aff', '001dff','0001ff', '1b00ff', '3800ff', '5400ff']}
+Map.addLayer(dataset,vis,'Soil pH  30 cm depth')
+var vis = {bands: ['b60'],min:5.2,max: 6.8,palette: ['ff0000', 'ff1c00', 'ff3900', 'ff5500', 'ff7100', 'ff8e00','ffaa00', 'ffc600', 'ffe200', 'ffff00', 'e3ff00', 'c7ff00','aaff00', '8eff00', '72ff00', '55ff00', '39ff00', '1dff00','01ff00', '00ff1c', '00ff38', '00ff54', '00ff71', '00ff8d','00ffa9', '00ffc6', '00ffe2', '00fffe', '00e3ff', '00c7ff','00abff', '008fff', '0072ff', '0056ff', '003aff', '001dff','0001ff', '1b00ff', '3800ff', '5400ff']}
+Map.addLayer(dataset,vis,'Soil pH  60 cm depth')
+var vis = {bands: ['b100'],min:5.2,max: 6.8,palette: ['ff0000', 'ff1c00', 'ff3900', 'ff5500', 'ff7100', 'ff8e00','ffaa00', 'ffc600', 'ffe200', 'ffff00', 'e3ff00', 'c7ff00','aaff00', '8eff00', '72ff00', '55ff00', '39ff00', '1dff00','01ff00', '00ff1c', '00ff38', '00ff54', '00ff71', '00ff8d','00ffa9', '00ffc6', '00ffe2', '00fffe', '00e3ff', '00c7ff','00abff', '008fff', '0072ff', '0056ff', '003aff', '001dff','0001ff', '1b00ff', '3800ff', '5400ff']}
+Map.addLayer(dataset,vis,'Soil pH  100 cm depth')
+var vis = {bands: ['b200'],min:5.542,max: 7.558,palette: ['ff0000', 'ff1c00', 'ff3900', 'ff5500', 'ff7100', 'ff8e00','ffaa00', 'ffc600', 'ffe200', 'ffff00', 'e3ff00', 'c7ff00','aaff00', '8eff00', '72ff00', '55ff00', '39ff00', '1dff00','01ff00', '00ff1c', '00ff38', '00ff54', '00ff71', '00ff8d','00ffa9', '00ffc6', '00ffe2', '00fffe', '00e3ff', '00c7ff','00abff', '008fff', '0072ff', '0056ff', '003aff', '001dff','0001ff', '1b00ff', '3800ff', '5400ff']}
+Map.addLayer(dataset,vis,'Soil pH  200 cm depth')
+
+
+
+
+
+
+// Define the palette and labels
+var palette = ['ff0000','ff5500','ffff00','55ff00','00ff8d','008fff','5400ff' ]
+var labels = ['Minimal:5.8 in H2O','Suboptimal','Moderate','Satisfactory','Optimal','Superior','Maximal:6.7 in H2O']
+// Create the legend
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',
+    padding: '8px 15px'
+  }
+});
+
+// Title for the legend
+var legendTitle = ui.Label({
+  value: 'Soil PH depths 0/10/30/60/100/200cm - Europa - 2024',
+  style: {
+    fontWeight: 'bold',
+    fontSize: '19px',
+    margin: '0 0 10px 0',
+    padding: '0'
+  }
+});
+legend.add(legendTitle);
+
+// Function to create a legend item
+var makeLegendItem = function(color, name) {
+  var colorBox = ui.Label({
+    style: {
+      backgroundColor: color,
+      padding: '8px',
+      margin: '0 0 4px 0'
+    }
+  });
+
+  var description = ui.Label({
+    value: name,
+    style: {
+      margin: '0 0 4px 6px'
+    }
+  });
+
+  return ui.Panel({
+    widgets: [colorBox, description],
+    layout: ui.Panel.Layout.Flow('horizontal')
+  });
+};
+
+// Add each color and label to the legend
+for (var i = 0; i < palette.length; i++) {
+  legend.add(makeLegendItem(palette[i], labels[i]));
+}
+
+// Add the legend to the map
+Map.add(legend);
+
+
+
+
+
