@@ -1,0 +1,97 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com  Happy coding! 🚀
+var geometry = 
+    /* color: #ffc82d */
+    /* shown: false */
+    ee.Geometry.Point([-101.70874127980353, 25.687514775838682]);
+/*YOu CAN USE city boundary and run this code only for your  city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+
+
+YOu CAN USE province boundary and run this code only for your  province
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+
+
+//YOu CAN USE country boundary and run this code only for your  country
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,3)
+
+
+
+
+
+
+var index = ee.ImageCollection("MODIS/061/MOD15A2H").select('Lai_500m').filterBounds(country).filterDate('2022-01-01','2022-01-02')
+var index = index.map(function(img){
+  return img.clip(country).multiply(0.1).copyProperties(img, ['system:time_start'])})
+print(index.size())
+Map.addLayer(index.mean(),{min:0,max:1,palette: [ 'ce7e45', 'df923d', 'f1b555', 'fcd163', '99b718', '74a901','66a000', '529400', '3e8601', '207401', '056201', '004c00', '023b01','012e01', '011d01', '011301']},'Leaf Area Index')
+print((ui.Chart.image.series(index,country , ee.Reducer.mean(), 1113.2 ,'system:time_start')).setOptions({title:'Leaf Area Index ',interpolateNulls:true,lineWidth:1,pointSize:2,curveType:'function',vAxis:{title: ('Area fraction')}}))
+
+//***************
+var index = ee.ImageCollection("MODIS/061/MOD15A2H").select('Fpar_500m').filterBounds(country).filterDate('2022-01-01','2022-01-02')
+var index = index.map(function(img){
+  return img.clip(country).multiply(0.01).copyProperties(img, ['system:time_start'])})
+print(index.size())
+Map.addLayer(index.mean(),{min:0,max:0.49,palette: ['ce7e45', 'df923d', 'f1b555', 'fcd163', '99b718', '74a901','66a000', '529400', '3e8601', '207401', '056201', '004c00', '023b01','012e01', '011d01', '011301']},'Photosynthetically Active Radiation')
+print((ui.Chart.image.series(index,country , ee.Reducer.mean(), 1113.2 ,'system:time_start')).setOptions({title:'raction of Photosynthetically Active Radiation ',interpolateNulls:true,lineWidth:1,pointSize:2,curveType:'function',vAxis:{title: ('%')}}))
+
+var palette = ['fcd163', '66a000', '207401', '056201', '011301' ]
+var labels = ['Minimal:0 and 0 ','Moderate','Satisfactory','Optimal','Maximal:  1 and49']
+
+// Create the legend
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',
+    padding: '8px 15px'
+  }
+});
+
+// Title for the legend
+var legendTitle = ui.Label({
+  value: 'Leaf Area Index(Area fraction) /Photosynthetically Active Radiation (%) - -YEAR:2024',
+  style: {
+    fontWeight: 'bold',
+    fontSize: '16px',
+    margin: '0 0 10px 0',
+    padding: '0'
+  }
+});
+legend.add(legendTitle);
+
+// Function to create a legend item
+var makeLegendItem = function(color, name) {
+  var colorBox = ui.Label({
+    style: {
+      backgroundColor: color,
+      padding: '8px',
+      margin: '0 0 4px 0'
+    }
+  });
+
+  var description = ui.Label({
+    value: name,
+    style: {
+      margin: '0 0 4px 6px'
+    }
+  });
+
+  return ui.Panel({
+    widgets: [colorBox, description],
+    layout: ui.Panel.Layout.Flow('horizontal')
+  });
+};
+
+// Add each color and label to the legend
+for (var i = 0; i < palette.length; i++) {
+  legend.add(makeLegendItem(palette[i], labels[i]));
+}
+
+// Add the legend to the map
+Map.add(legend);
