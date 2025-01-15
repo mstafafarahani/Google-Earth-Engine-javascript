@@ -1,0 +1,109 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com  Happy coding! 🚀
+var geometry = 
+    /* color: #98ff00 */
+    /* shown: false */
+    ee.Geometry.Point([-7.68090233677843, 40.7527417127631]);
+/*YOu CAN USE city boundary and run this code only for your  city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+
+
+YOu CAN USE province boundary and run this code only for your  province
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+
+
+//YOu CAN USE country boundary and run this code only for your  country
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,3)
+
+
+
+
+
+var dataset = ee.Image('UMD/hansen/global_forest_change_2022_v1_10')
+var loss = dataset.select('loss')
+var gain = dataset.select('gain')
+
+var areaLoss = loss.multiply(ee.Image.pixelArea())
+var areaGain = gain.multiply(ee.Image.pixelArea())
+
+var losStats = areaLoss.reduceRegion({
+  reducer:ee.Reducer.sum(),
+  geometry:country.geometry(),
+  scale:30,
+  maxPixels:1e11
+})
+print('AREA Loss forest:' ,losStats.get('loss'), "square meters" )
+//**********
+var gainStats = areaGain.reduceRegion({
+  reducer:ee.Reducer.sum(),
+  geometry:country.geometry(),
+  scale:30,
+  maxPixels:1e11
+})
+print('AREA Gain forest:' ,gainStats.get('gain'), "square meters" )
+Map.addLayer(ee.Image().paint(country,0,1),{palette:['gray']},  'your region')
+Map.centerObject(country,6)
+
+Map.addLayer(loss.clip(country).updateMask(loss), {palette:['red']},  'Forest Loss')
+Map.addLayer(gain.clip(country).updateMask(gain), {palette:['blue']},  'Forest gain')
+
+var palette = ['red', 'blue']
+var labels =  ['forest loss area :52991166(meter)', 'forest gain area:18830690(meter)']
+
+// Create the legend
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',
+    padding: '8px 15px'
+  }
+});
+
+// Title for the legend
+var legendTitle = ui.Label({
+  value: 'AREA Forest: -Israel -YEAR:2024',
+  style: {
+    fontWeight: 'bold',
+    fontSize: '16px',
+    margin: '0 0 10px 0',
+    padding: '0'
+  }
+});
+legend.add(legendTitle);
+
+// Function to create a legend item
+var makeLegendItem = function(color, name) {
+  var colorBox = ui.Label({
+    style: {
+      backgroundColor: color,
+      padding: '8px',
+      margin: '0 0 4px 0'
+    }
+  });
+
+  var description = ui.Label({
+    value: name,
+    style: {
+      margin: '0 0 4px 6px'
+    }
+  });
+
+  return ui.Panel({
+    widgets: [colorBox, description],
+    layout: ui.Panel.Layout.Flow('horizontal')
+  });
+};
+
+// Add each color and label to the legend
+for (var i = 0; i < palette.length; i++) {
+  legend.add(makeLegendItem(palette[i], labels[i]));
+}
+
+// Add the legend to the map
+Map.add(legend);
