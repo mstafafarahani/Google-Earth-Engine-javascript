@@ -1,0 +1,96 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com  Happy coding! 🚀
+var geometry = 
+    /* color: #00ff00 */
+    /* shown: false */
+    ee.Geometry.Point([43.13964995490881, 27.442142190641984]);
+
+
+/*YOu CAN USE city boundary and run this code only for your  city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+
+
+YOu CAN USE province boundary and run this code only for your  province
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+
+
+//YOu CAN USE country boundary and run this code only for your  country
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,3)
+
+
+//0 to 100 persent
+
+var index = ee.ImageCollection("NCEP_RE/surface_wv").select('pr_wtr').filterBounds(country).filterDate('2024-06-01','2024-09-25')
+var index = index.map(function(img){
+  return img.clip(country).multiply(1).divide(1).add(0).subtract(0).copyProperties(img, ['system:time_start'])})
+print(index.size())
+Map.addLayer(index.mean(),{min:0,max:60,palette: ['0000ff', '00ffff', '008000', 'ffff00', 'ff0000']},'Water Vapor')
+
+
+print((ui.Chart.image.series
+(index,country , ee.Reducer.mean(), 278300  ,'system:time_start'))
+.setOptions({title:'Water Vapor ',
+interpolateNulls:true,lineWidth:1,
+pointSize:2,curveType:'function',
+vAxis:{title: ('kg/m^2 (range:-8.2	89.8)	')}}))
+
+// Define the palette and labels
+var palette = ['0000ff', '00ffff', '008000', 'ffff00', 'ff0000']
+var labels = ['Minimal:-8kg/m^2','Suboptimal','Moderate','Superior','Maximal:89kg/m^2']
+// Create the legend
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',
+    padding: '8px 15px'
+  }
+});
+
+// Title for the legend
+var legendTitle = ui.Label({
+  value: 'Water Vapor kg/m^2 (range:-8.2	89.8)- 2024',
+  style: {
+    fontWeight: 'bold',
+    fontSize: '19px',
+    margin: '0 0 10px 0',
+    padding: '0'
+  }
+});
+legend.add(legendTitle);
+
+// Function to create a legend item
+var makeLegendItem = function(color, name) {
+  var colorBox = ui.Label({
+    style: {
+      backgroundColor: color,
+      padding: '8px',
+      margin: '0 0 4px 0'
+    }
+  });
+
+  var description = ui.Label({
+    value: name,
+    style: {
+      margin: '0 0 4px 6px'
+    }
+  });
+
+  return ui.Panel({
+    widgets: [colorBox, description],
+    layout: ui.Panel.Layout.Flow('horizontal')
+  });
+};
+
+// Add each color and label to the legend
+for (var i = 0; i < palette.length; i++) {
+  legend.add(makeLegendItem(palette[i], labels[i]));
+}
+
+// Add the legend to the map
+Map.add(legend);
