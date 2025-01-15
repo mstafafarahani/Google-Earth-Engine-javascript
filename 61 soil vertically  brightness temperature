@@ -1,0 +1,117 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com  Happy coding! 🚀
+var geometry = 
+    /* color: #bf04c2 */
+    /* shown: false */
+    ee.Geometry.Point([50.16831633437338, 33.13074977276155]);
+/*Weighted average of vertically polarized brightness temperatures. 
+This value represents the corrected land brightness temperature if the water fraction is
+lower than 0.9 (otherwise no correction is applied) or represents the corrected 
+water brightness temperature if the water fraction is greater than 0.1 
+(otherwise no correction is applied); AM overpass*/
+    
+    
+/*YOu CAN USE city boundary and run this code only for your  city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+
+
+
+YOu CAN USE province boundary and run this code only for your  province
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+
+
+
+
+//YOu CAN USE country boundary and run this code only for your  country
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,3)
+
+
+
+
+
+
+
+
+
+var verticallybrightnesstemperature = ee.ImageCollection("NASA/SMAP/SPL3SMP_E/005").select('tb_v_corrected_am').filterBounds(country).filterDate('2023-01-01','2023-12-01')
+var verticallybrightnesstemperature = verticallybrightnesstemperature.map(function(img){
+//convert kelvin to celcius (0K − 273.15 = -273.1°C)
+  return img.clip(country).multiply(1).subtract(273.15).divide(1).add(0).copyProperties(img, ['system:time_start'])})//Percent of verticallybrightnesstemperature : 0 - 30 
+
+
+
+
+print(verticallybrightnesstemperature.size())
+
+
+print((ui.Chart.image.series(verticallybrightnesstemperature,country,ee.Reducer.mean(),9000,'system:time_start'))
+.setOptions({title: 'verticallybrightnesstemperature : 0 - 30 ',interpolateNulls:true,lineWidth:1,pointSize:2,curveType:'function',vAxis:{title: ('°C ')}}))
+
+
+
+
+Map.addLayer(verticallybrightnesstemperature.mean(),{min: 2.0627660751342773,max:11.413775444030762,palette: ['684021', 'cf851f', 'ff9401', '0042ff','01a7f8']},'verticallybrightnesstemperature')
+
+
+
+
+
+var palette = ['684021', 'cf851f', 'ff9401', '0042ff','01a7f8' ]
+var labels = ['Minimal:2 °C','Moderate','Satisfactory','Optimal','Maximal:11 °C']
+
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',
+    padding: '8px 15px'
+  }
+});
+
+// Title for the legend
+var legendTitle = ui.Label({
+  value: 'verticallybrightnesstemperature -2024',
+  style: {
+    fontWeight: 'bold',
+    fontSize: '19px',
+    margin: '0 0 10px 0',
+    padding: '0'
+  }
+});
+legend.add(legendTitle);
+
+// Function to create a legend item
+var makeLegendItem = function(color, name) {
+  var colorBox = ui.Label({
+    style: {
+      bacverticallybrightnesstemperatureroundColor: color,
+      padding: '8px',
+      margin: '0 0 4px 0'
+    }
+  });
+
+  var description = ui.Label({
+    value: name,
+    style: {
+      margin: '0 0 4px 6px'
+    }
+  });
+
+  return ui.Panel({
+    widgets: [colorBox, description],
+    layout: ui.Panel.Layout.Flow('horizontal')
+  });
+};
+
+// Add each color and label to the legend
+for (var i = 0; i < palette.length; i++) {
+  legend.add(makeLegendItem(palette[i], labels[i]));
+}
+
+// Add the legend to the map
+Map.add(legend);
