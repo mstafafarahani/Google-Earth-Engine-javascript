@@ -1,0 +1,113 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com  Happy coding! 🚀
+var geometry = 
+    /* color: #98ff00 */
+    /* shown: false */
+    ee.Geometry.Point([-73.50791350349007, -13.797888148833703]);
+    
+    
+    
+    
+    
+/*YOu CAN USE city boundary and run this code only for your  city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+
+
+
+YOu CAN USE province boundary and run this code only for your  province
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+
+
+
+
+//YOu CAN USE country boundary and run this code only for your  country
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,3)
+
+
+
+
+
+
+
+//The volumetric soil moisture content remaining at field capacity is about 15 to 25% for sandy soils
+//, 35 to 45% for loam soils, and 45 to 55% for clay soils.
+
+var Moisture = ee.ImageCollection("NASA/SMAP/SPL3SMP_E/005").select('vegetation_water_content_pm').filterBounds(country).filterDate('2023-01-01','2023-12-01')
+var Moisture = Moisture.map(function(img){
+  return img.clip(country).multiply(1000).subtract(0).divide(1).add(0).copyProperties(img, ['system:time_start'])})//Percent of Moisture : 0 - 30 
+
+
+
+
+print(Moisture.size())
+
+
+print((ui.Chart.image.series(Moisture,country,ee.Reducer.mean(),9000,'system:time_start'))
+.setOptions({title: 'Soil moisture(vegetation_water_content) : 0 - 30 ',interpolateNulls:true,lineWidth:1,pointSize:2,curveType:'function',vAxis:{title: ('g/m^2 ')}}))
+
+
+
+
+Map.addLayer(Moisture.mean(),{min: 2.0627660751342773,max:11.413775444030762,palette: ['684021', 'cf851f', 'ff9401', '0042ff','01a7f8']},'Soil moisture(vegetation_water_content)')
+
+
+
+var palette = ['684021', 'cf851f', 'ff9401', '0042ff','01a7f8' ]
+var labels = ['Minimal:2 g/m^2','Moderate','Satisfactory','Optimal','Maximal:11 g/m^2']
+
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',
+    padding: '8px 15px'
+  }
+});
+
+// Title for the legend
+var legendTitle = ui.Label({
+  value: 'Soil moisture(vegetation_water_content) -  - 2024',
+  style: {
+    fontWeight: 'bold',
+    fontSize: '19px',
+    margin: '0 0 10px 0',
+    padding: '0'
+  }
+});
+legend.add(legendTitle);
+
+// Function to create a legend item
+var makeLegendItem = function(color, name) {
+  var colorBox = ui.Label({
+    style: {
+      backgroundColor: color,
+      padding: '8px',
+      margin: '0 0 4px 0'
+    }
+  });
+
+  var description = ui.Label({
+    value: name,
+    style: {
+      margin: '0 0 4px 6px'
+    }
+  });
+
+  return ui.Panel({
+    widgets: [colorBox, description],
+    layout: ui.Panel.Layout.Flow('horizontal')
+  });
+};
+
+// Add each color and label to the legend
+for (var i = 0; i < palette.length; i++) {
+  legend.add(makeLegendItem(palette[i], labels[i]));
+}
+
+// Add the legend to the map
+Map.add(legend);
