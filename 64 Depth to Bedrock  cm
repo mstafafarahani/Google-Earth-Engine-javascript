@@ -1,0 +1,125 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com  Happy coding! 🚀
+var geometry = 
+    /* color: #ffc82d */
+    /* shown: false */
+    ee.Geometry.Point([23.30007506155074, -29.183054472256728]);
+/*YOu CAN USE city boundary and run this code only for your  city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+
+
+YOu CAN USE province boundary and run this code only for your  province
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+
+
+//YOu CAN USE country boundary and run this code only for your  country
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,3)
+
+
+
+
+function soil(id, band, name){
+  var image = ee.Image(id).select(band)
+  Map.addLayer(image.clip(country),[],name,false)
+  print(ui.Chart.image.histogram(image, country, 1000))
+  var stat = image.reduceRegion({reducer: ee.Reducer.mean().combine({reducer2: ee.Reducer.minMax(), sharedInputs: true}),
+  geometry: country, scale: 1000});
+  print('statistical information for '+name,stat)
+  
+  
+  
+  
+  
+  Export.image.toDrive({
+  image: image.clip(country),
+  description: name,
+  scale: 1000,
+  region: country,
+  crs: image.getInfo().crs,
+  folder: 'test'
+  })
+  return image
+  }
+
+var Aluminium  = soil("ISDASOIL/Africa/v1/bedrock_depth", 'mean_0_200', 'DepthtoBedrock cm 0-20cm')//DepthtoBedrock 0-200
+
+
+var dataset = ee.Image('ISDASOIL/Africa/v1/bedrock_depth').clip(country)
+print((ui.Chart.image.series(dataset,country,ee.Reducer.mean(),1000,'system:time_start')).setOptions({title:'DepthtoBedrock  1950',interpolateNulls:true,lineWidth:1,pointSize:2,curveType:'function',vAxis:{title: ('cm)')}}))
+
+
+
+
+var vis = {bands: ['mean_0_200'],min: 1,max:11,palette: ['ffff00', 'f8f806', 'f1f10c', 'ebeb13', 'e4e419', 'dddd20','d7d726', 'd0d02d', 'caca33', 'c3c33a', 'bcbc41', 'b6b647','b0b04e', 'a9a954', 'a3a35a', '9c9c61', '959568', '8f8f6e','898975', '82827b', '7b7b82', '757589', '6e6e8f', '686895','61619c', '5a5aa3', '5454a9', '4d4db0', '4747b6', '4141bc','3a3ac3', '3333ca', '2d2dd0', '2626d7', '2020dd', '1919e4','1212eb', '0c0cf1', '0606f8', '0000ff']}
+Map.addLayer(dataset,vis,'DepthtoBedrock 0-200 depth cm ')
+
+
+
+
+
+
+
+
+
+var palette = ['ffff00','caca33','8f8f6e','61619c','3a3ac3','2d2dd0','0000ff' ]
+var labels = ['Minimal:1(cm)','Suboptimal','Moderate','Satisfactory','Optimal','Superior','Maximal:40(cm)']
+
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',
+    padding: '8px 15px'
+  }
+});
+
+// Title for the legend
+var legendTitle = ui.Label({
+  value: 'DepthtoBedrock depths cm - 2024',
+  style: {
+    fontWeight: 'bold',
+    fontSize: '19px',
+    margin: '0 0 10px 0',
+    padding: '0'
+  }
+});
+legend.add(legendTitle);
+
+// Function to create a legend item
+var makeLegendItem = function(color, name) {
+  var colorBox = ui.Label({
+    style: {
+      backgroundColor: color,
+      padding: '8px',
+      margin: '0 0 4px 0'
+    }
+  });
+
+  var description = ui.Label({
+    value: name,
+    style: {
+      margin: '0 0 4px 6px'
+    }
+  });
+
+  return ui.Panel({
+    widgets: [colorBox, description],
+    layout: ui.Panel.Layout.Flow('horizontal')
+  });
+};
+
+// Add each color and label to the legend
+for (var i = 0; i < palette.length; i++) {
+  legend.add(makeLegendItem(palette[i], labels[i]));
+}
+
+// Add the legend to the map
+Map.add(legend);
+
+
+
