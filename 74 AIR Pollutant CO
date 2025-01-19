@@ -1,0 +1,83 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com  Happy coding! 🚀
+var geometry = /* color: #00ff00 */ee.Geometry.Polygon(
+        [[[-125.14508399308116, 49.628930272729974],
+          [-139.73492774308116, 42.832149903142884],
+          [-137.27399024308116, 35.76933471980963],
+          [-115.12555274308116, 26.61367412757645],
+          [-105.98492774308116, 34.18508632365886],
+          [-112.66461524308116, 42.832149903142884]]]);
+/*YOu CAN USE city boundary and run this code only for your  city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+
+
+YOu CAN USE province boundary and run this code only for your  province
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+
+
+/*YOu CAN USE country boundary and run this code only for your  country
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,5)*/
+
+
+
+Map.centerObject(geometry,3)
+var collection = ee.ImageCollection("COPERNICUS/S5P/NRTI/L3_CO").select('CO_column_number_density').filterBounds(geometry)
+.filterDate('2025-01-01','2025-01-15')
+var convertToppm = function(image) {
+  var molecularWeightAir = 28.9647 // g/mol
+  var molarMassco = 28.01 //g/mol
+  var standardPressure = 1013.25  // hpa convert to pa  for proper scaling
+  var scalingFactor = 1e6   // 1e6=ppm  1e9=ppb  conversion to ppm 1 ppm=1000 ppb
+
+
+  var coInppm = image.expression(
+    '((co * (molecularWeightAir / molarMassco ) * scalingFactor / standardPressure))' , {
+      'co' : image.select('CO_column_number_density'),
+      'molecularWeightAir' : molecularWeightAir,
+      'molarMassco' : molarMassco,
+      'standardPressure' : standardPressure * 100, // hpa convert to pa
+      'scalingFactor' : scalingFactor
+  }).rename('co_ppm')
+  return image.addBands(coInppm)
+  }
+
+var ppmCollection = collection.map(convertToppm)
+var calculateMeanppm = function(image) {
+  var stats = image.reduceRegion({
+    reducer: ee.Reducer.max(),
+    geometry: geometry,
+    scale: 1113.2 
+  })
+  return image.set('mean_co_ppm' ,stats.get("co_ppm"))
+}
+
+var meanCollection = ppmCollection.map(calculateMeanppm)
+var chart = ui.Chart.feature.byFeature(meanCollection, 'system:time_start', 'mean_co_ppm')
+print(chart)
+Map.addLayer(collection,{min: 0.01761164228046835,max: 0.042478072332622685,palette: ['yellow','orange','red','purple','black']},'mean_co_ppm')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
