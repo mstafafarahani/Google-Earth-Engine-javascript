@@ -1,0 +1,178 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com  Happy coding! 🚀
+var geometry = 
+    /* color: #ffc82d */
+    /* shown: false */
+    ee.Geometry.Polygon(
+        [[[55.86256314390128, 26.597589711846542],
+          [55.92436123960441, 26.636877677759223],
+          [55.92710782163566, 26.674925013885417],
+          [55.88934231870597, 26.695784295637914],
+          [55.860503207377846, 26.682901072314582],
+          [55.833037387065346, 26.638718969845794],
+          [55.83715726011222, 26.606799040048337]]]);
+/*YOu CAN USE city boundary and run this code only for your  city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+
+
+YOu CAN USE province boundary and run this code only for your  province
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+/*
+//For Basin Baoundary
+var dataset = ee.FeatureCollection("WWF/HydroSHEDS/v1/Basins/hybas_4").filterBounds(geometry)
+Map.addLayer(dataset) 
+*/
+
+/*YOu CAN USE country boundary and run this code only for your  country
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,5)*/
+
+
+Map.centerObject(geometry,9)
+
+
+
+var classification = ee.Image("ACA/reef_habitat/v2_0").select('geomorphic')
+print(classification)
+
+var classNames = classification.get('geomorphic_class_names') 
+var classValues = classification.get('geomorphic_class_values') 
+print(classNames)
+print(classValues)
+
+var classValues = ee.List(classValues).map(function(item){
+  return ee.Number(item).format()
+})
+var classDict = ee.Dictionary.fromLists(classValues,classNames)
+print(classDict)
+//calculate Class Areas for a multiple regions
+
+var clipped = classification.clip(geometry)
+Map.addLayer(clipped,{},'clipped')
+//method eq
+var water = clipped.eq(20)
+//Map.addLayer(water.selfMask(),{min:0,max:1,palette:['white','blue']},'masked')
+
+//method Area
+var areahectar = ee.Image.pixelArea().divide(1e6)    // km2
+var areaImage = areahectar.addBands(clipped)
+print(areaImage)
+//method Grouped Reducer
+var areas = areaImage.reduceRegion({
+      reducer: ee.Reducer.sum().group({
+      groupField: 1,
+      groupName: 'class',
+    }),
+    geometry: geometry,
+    scale: 10,
+    maxPixels: 1e10
+    })
+
+var classAreas = ee.List(areas.get('groups'))
+// Process results to extract the areas and
+// create a FeatureCollection
+var classAreaList = classAreas.map(function(item) {
+  var areaDict = ee.Dictionary(item)
+  var classNumber = ee.Number(areaDict.get('class')).format()
+  var area = ee.Number(areaDict.get('sum')).round()
+  return ee.List([classDict.get(classNumber),area])
+})
+var result = ee.Dictionary(classAreaList.flatten())
+print(result)
+
+//pie chart
+
+var classAreaList = classAreas.map(function(item) {
+  var areaDict = ee.Dictionary(item);
+  var classNumber = ee.Number(areaDict.get('class')).format();
+  var area = ee.Number(areaDict.get('sum')).round();
+  return ee.Feature(null, {
+    className: classDict.get(classNumber),
+    area: area                          
+  });
+});
+
+// FeatureCollection
+var chartData = ee.FeatureCollection(classAreaList);
+
+
+var pieChart = ui.Chart.feature.byFeature(chartData, 'className', 'area')
+  .setChartType('PieChart')
+  .setOptions({
+    title: ' group',
+    legend: {position: 'right'},
+    sliceVisibilityThreshold: 0.02,
+    colors: ['000000','77d0fc','2ca2f9','c5a7cb','92739d','614272','fbdefb','10bda6','288471','cd6812','befbff','befbff']
+  })
+
+print(pieChart);
+// Define the palette and labels
+var palette = ['000000','77d0fc','2ca2f9','c5a7cb','92739d','614272','fbdefb','10bda6','288471','cd6812','befbff','befbff']
+var labels = ['Unmapped'
+,'Shallow Lagoon - Shallow Lagoon is any closed to semi-enclosed, sheltered, flat-bottomed shallow sediment-dominated lagoon area.'
+,'Deep Lagoon - Deep Lagoon is any sheltered broad body of water semi-enclosed to enclosed by reef, with a variable depth (but shallower than surrounding ocean) and a soft bottom dominated by reef-derived sediment.'
+,'Inner Reef Flat - Inner Reef Flat is a low energy, sediment-dominated, horizontal to gently sloping platform behind the Outer Reef Flat.'
+,'Outer Reef Flat - Adjacent to the seaward edge of the reef, Outer Reef Flat is a level (near horizontal), broad and shallow platform that displays strong wave-driven zonation'
+,'Reef Crest - Reef Crest is a zone marking the boundary between the reef flat and the reef slope, generally shallow and characterized by highest wave energy absorbance.'
+,'Terrestrial Reef Flat - Terrestrial Reef Flat is a broad, flat, shallow to semi-exposed area of fringing reef found directly attached to land at one side, and subject to freshwater run-off, nutrients and sediment.'
+,'Sheltered Reef Slope - Sheltered Reef Slope is any submerged, sloping area extending into Deep Water but protected from strong directional prevailing wind or current, either by land or by opposing reef structures.'
+,'Reef Slope - Reef Slope is a submerged, sloping area extending seaward from the Reef Crest (or Flat) towards the shelf break. Windward facing, or any direction if no dominant prevailing wind or current exists.'
+,'Plateau - Plateau is any deeper submerged, hard-bottomed, horizontal to gently sloping seaward facing reef feature.'
+,'Back Reef Slope - Back Reef Slope is a complex, interior, - often gently sloping - reef zone occurring behind the Reef Flat. Of variable depth (but deeper than Reef Flat and more sloped), it is sheltered, sediment-dominated and often punctuated by coral outcrops.'
+,'Patch Reef - Patch Reef is any small, detached to semi-detached lagoonal coral outcrop arising from sand-bottomed area.'
+]
+// Create the legend
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',
+    padding: '8px 15px'
+  }
+});
+
+// Title for the legend
+var legendTitle = ui.Label({
+  value: 'اکوسیستم‌های مرجانیgeomorphic',
+  style: {
+    fontWeight: 'bold',
+    fontSize: '19px',
+    margin: '0 0 10px 0',
+    padding: '0'
+  }
+});
+legend.add(legendTitle);
+
+// Function to create a legend item
+var makeLegendItem = function(color, name) {
+  var colorBox = ui.Label({
+    style: {
+      backgroundColor: color,
+      padding: '8px',
+      margin: '0 0 4px 0'
+    }
+  });
+
+  var description = ui.Label({
+    value: name,
+    style: {
+      margin: '0 0 4px 6px'
+    }
+  });
+
+  return ui.Panel({
+    widgets: [colorBox, description],
+    layout: ui.Panel.Layout.Flow('horizontal')
+  });
+};
+
+// Add each color and label to the legend
+for (var i = 0; i < palette.length; i++) {
+  legend.add(makeLegendItem(palette[i], labels[i]));
+}
+
+// Add the legend to the map
+Map.add(legend);
