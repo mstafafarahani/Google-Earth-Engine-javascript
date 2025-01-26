@@ -1,0 +1,105 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com
+var geometry = 
+    /* color: #0b4a8b */
+    /* shown: false */
+    ee.Geometry.Polygon(
+        [[[43.36465026726147, 33.65582583164248],
+          [43.60360290398022, 33.70153777126806],
+          [43.63930847038647, 33.90010161110294],
+          [43.38662292351147, 34.17549782358801],
+          [43.10097839226147, 34.50886449161877],
+          [43.01308776726147, 34.44093815623301],
+          [43.00210143913647, 34.320799924090394],
+          [42.99935485710522, 34.095929697690956],
+          [43.02132751335522, 33.927453551369695],
+          [43.07351257194897, 33.765493640664296]]]);
+/*YOu CAN USE city boundary and run this code only for your  city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600C/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+YOu CAN USE province boundary and run this code only for your  province
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+/*YOu CAN USE country boundary and run this code only for your  country
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country  boundary to the map*/
+
+
+
+
+Map.centerObject(geometry,10)
+var IMG = ee.ImageCollection("LANDSAT/LC08/C02/T1_TOA").filterBounds(geometry).filterDate('2010-01-01','2022-12-31').filterMetadata('CLOUD_COVER', 'less_than',1).median().clip(geometry).select('B1','B2','B3','B4','B5','B6')
+//Map.addLayer(IMG,{min: 0.0,max: 0.4},'True color')
+function MNDW_f(img){
+  //water mask
+var MNDWI = img.normalizedDifference(['B3','B6']).rename('MNDWI')
+  return img.addBands(MNDWI)
+  .updateMask(MNDWI.gt(0))}
+var IMG_water = MNDW_f(IMG)
+Map.addLayer(IMG_water.select('MNDWI'),{palette:['blue']}, 'IMG_water')
+
+
+  
+// AREA NDWI ha********************************************************************************************
+Map.centerObject(geometry,7)
+var NDwI = ee.ImageCollection("MODIS/MYD09GA_006_NDWI").select('NDWI').filterBounds(geometry).filterDate('2010-01-01','2022-12-31')
+var NDwI = NDwI.map(function(img){
+  return img.clip(geometry).multiply(1).divide(1).add(0).subtract(0).copyProperties(img, img.propertyNames())})
+
+
+  //تحاسم لسکیپ
+var NDwI_area = NDwI.map(function(img){
+  var thr = img.gte(1)//0.3
+  var mask = thr.updateMask(thr)
+  var area = mask.multiply(ee.Image.pixelArea().divide(1e6))//1 m2     pixel for    km2 1e6
+  return area.copyProperties(img, img.propertyNames())
+})
+
+print(NDwI_area.size())
+print((ui.Chart.image.series(NDwI_area,geometry , ee.Reducer.mean(),463.313,'system:time_start')).setOptions({title:'lake and water area (km2)',interpolateNulls:true,lineWidth:1,pointSize:2,curveType:'function',vAxis:{title: ('AREA NDWI km2')}}))
+//Map.addLayer(NDwI.mean(),{min:-0.11295367777347565,max:0.22622515261173248,palette:['ffffff','fffcf7','fbfffa','blue']},'AREA NDWI ha')
+//------NUMERICAL legand--------
+var palette = ['ffffff','fffcf7','fbfffa','blue']
+var vis = {min:'', max: "", palette: palette}
+var nSteps = 10
+// Creates a color bar thumbnail image for
+//use in legend from the given color palette
+function makeColorBarParams(palette) {
+  return {
+    bbox: [0, 0, nSteps, 0.1],
+    dimensions: '10x100',
+    format: 'png',
+    min: 0,
+    max: nSteps,
+    palette: palette,
+  }
+}
+// Create the colour bar for the legend
+var colorBar = ui.Thumbnail({
+  image: ee.Image.pixelLonLat().select(0).int(),
+  params: makeColorBarParams(vis.palette),
+  style: {stretch: 'horizontal', margin: '0px 4px', maxHeight: '12px'},
+})
+// Create a panel with three numbers for the legend
+var legendLabels = ui.Panel({
+  widgets: [
+    ui.Label(vis.min, {margin: '4px 8px'}),
+    ui.Label(
+        ((vis.max-vis.min) / 2+vis.min),
+        {margin: '4px 8px', textAlign: 'center', stretch: 'horizontal'}),
+    ui.Label(vis.max, {margin: '4px 8px'})
+  ],
+  layout: ui.Panel.Layout.flow('horizontal')
+})
+// Legend title
+var legendTitle = ui.Label({
+  value: 'AREA NDWI KM2',
+  style: {fontWeight: 'bold'}
+})
+// Add the legendPanel to the map
+var legendPanel = ui.Panel([legendTitle, colorBar, legendLabels])
+Map.add(legendPanel)
+//-----------------------------
