@@ -1,0 +1,123 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com
+var geometry = /* color: #0b4a8b */ee.Geometry.Polygon(
+        [[[55.16151734370089, 36.809283311704576],
+          [54.98573609370089, 43.00464585784604],
+          [54.98573609370089, 47.517199525016395],
+          [47.07557984370089, 48.51660319856056],
+          [43.9994079687009, 42.48830069903152],
+          [47.86659546870089, 36.45663461486381],
+          [54.19472046870089, 35.74651085050445]]]);
+/*YOu CAN USE city boundary and run this code only for your  city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600C/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+YOu CAN USE province boundary and run this code only for your  province
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+/*YOu CAN USE country boundary and run this code only for your  country
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country  boundary to the map*/
+
+
+Map.centerObject(geometry,4)
+
+var Vaporpressure   = ee.ImageCollection("JAXA/GCOM-C/L3/OCEAN/CHLA/V3").select('CHLA_AVE').filterBounds(geometry).filterDate('2021-12-24','2022-12-20')
+var Vaporpressure   = Vaporpressure.map(function(img){
+  return img.clip(geometry).multiply(1).subtract(0).add(0).copyProperties(img, ['system:time_start'])})
+
+print(Vaporpressure.size())
+Map.addLayer(Vaporpressure.mean(),{min:-10897.557992254591,max:17662.01839438519 ,palette:['#00007f', '#0000ff', '#007fff', '#00ffff', '#7fff7f', '#ffff00', '#ff7f00', '#ff0000', '#7f0000']},'    chl    ')
+
+
+
+
+
+
+
+
+
+
+// Create a time series chart showing Vaporpressure   growth
+print(ui.Chart.image.series({
+  imageCollection: Vaporpressure ,
+  region: geometry,
+  reducer: ee.Reducer.mean(),
+  scale: 4638.3  ,
+  xProperty: 'system:time_start' 
+}).setSeriesNames(['Concentration of the green pigment (chlorophyll-a) in phytoplankton in sea surface layer. '])
+.setOptions({
+  title: 'Concentration of the green pigment (chlorophyll-a) in phytoplankton in sea surface layer.',
+  hAxis: {title: 'Year'},
+  vAxis: {title: '(mg/m^3	)'},
+  interpolateNulls: true,
+  lineWidth: 1,
+  pointSize: 2,
+  curveType: 'function'
+}));
+
+
+
+// Create a panel to display the legend
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',  // Position the panel in the bottom-right corner
+    padding: '8px 13px'  // Add padding for better appearance
+  }
+});
+
+// Add a title to the legend
+var legendTitle = ui.Label({
+  value: 'chl water',  // Title text
+  style: {
+    fontWeight: 'bold',  // Make the font bold
+    fontSize: '18px',  // Set the font size
+    margin: '0 0 4px 0',  // Margin for spacing
+    padding: '0'  // No padding for the label
+  }
+});
+
+// Add the title to the legend panel
+legend.add(legendTitle);
+
+// Function to create a vertical color bar
+var makeColorBar = function(palette) {
+  var colorBar = ui.Thumbnail({
+    image: ee.Image.pixelLonLat().select(1),  // Use latitude as the image for the gradient
+    params: {
+      bbox: [0, 0, 0.1, 1],  // Create a vertical color bar
+      dimensions: '10x100',  // Set the size of the color bar (10 pixels wide and 100 pixels high)
+      format: 'png',  // Image format
+      min: 0,  // Minimum value for the color bar
+      max: 1,  // Maximum value for the color bar
+      palette: palette,  // Use the provided palette for colors
+    },
+    style: {stretch: 'vertical', margin: '8px 0'}  // Stretch the color bar vertically and add margin
+  });
+  return colorBar;  // Return the created color bar
+};
+
+// Define the magma color palette
+var palette = ['#00007f', '#0000ff', '#007fff', '#00ffff', '#7fff7f', '#ffff00', '#ff7f00', '#ff0000', '#7f0000'] // Colors for the magma palette
+
+// Create labels for the min and max values
+var minLabel = ui.Label({
+  value: '172',  // Label for the maximum value
+  style: {margin: '4px 8px'}  // Add margin for better appearance
+});
+var maxLabel = ui.Label({
+  value: '162',  // Label for the minimum value
+  style: {margin: '4px 8px'}  // Add margin for better appearance
+});
+
+// Add the min label, color bar, and max label to the legend panel in a vertical layout
+legend.add(minLabel);  // Add the min label at the top
+legend.add(makeColorBar(palette));  // Add the color bar in the middle
+legend.add(maxLabel);  // Add the max label at the bottom
+
+// Add the legend panel to the map
+Map.add(legend);
+
+
