@@ -1,0 +1,129 @@
+var geometry = 
+    /* color: #d63000 */
+    /* shown: false */
+    ee.Geometry.Polygon(
+        [[[-59.34491158754885, -3.0259111929486595],
+          [-60.66327096254885, -2.1918230570020265],
+          [-61.64105416567385, -2.6089362842578447],
+          [-61.31146432192385, -3.3988587413620226],
+          [-60.10296822817385, -3.9032024964902865]]]);
+
+
+
+
+Map.centerObject(geometry);
+// 5. Load the canopy height image collection and create a mosaic // (Loading and Visualizing Canopy Height Data)
+var canopyHeightCollection = ee.ImageCollection("projects/meta-forest-monitoring-okw37/assets/CanopyHeight").mosaic();
+print(canopyHeightCollection,'Canopy Height Collection Properties');
+
+// 6. Define visualization parameters for the canopy height image
+var visParams1 = {
+  "opacity": 1, // Controls the transparency of the image. An opacity of 1 means the image is fully opaque
+  "bands": ["cover_code", "cover_code", "cover_code"], // Uses the "cover_code" band for red, green, and blue channels, resulting in a grayscale visualization.
+  "gamma": 1 // No adjustment to brightness and contrast
+};
+
+var visParams2 = {
+  "opacity": 1,
+  "bands": ["cover_code", "cover_code", "cover_code"],
+  "min": 1.6269897434224054, // Sets the minimum value for the data scaling
+  "max": 10.22118610067458,  // Sets the maximum value for the data scaling
+  "gamma": 1
+};
+
+// 7. Add the canopy height image, clipped to the ROI, to the map
+Map.addLayer(canopyHeightCollection.clip(geometry), visParams2, 'Canopy Height', false);
+print(ui.Chart.image.histogram(canopyHeightCollection, geometry, 100));
+
+// Loads the canopy height image collection, creates a mosaic, and defines visualization parameters. 
+// The canopy height image is then clipped to the ROI and added to the map.
+
+// 8. Create a mask for forest areas with canopy height greater than 0 (Creating a Forest Mask and Visualizing Forest Areas)
+var forestMask = canopyHeightCollection.gt(0);
+var forestAreas = canopyHeightCollection.updateMask(forestMask);
+
+// 9. Add the masked forest areas to the map
+Map.addLayer(forestAreas.clip(geometry), [], 'Forest Areas', false);
+
+// Creates a mask for forest areas with canopy height greater than 0, updates the mask on the canopy height image, 
+// and visualizes the forest areas on the map.
+
+// 10. Display a histogram of canopy height values within the ROI // (Displaying Histogram and Calculating Canopy Height Statistics)
+print(ui.Chart.image.histogram(forestAreas, geometry, 100));
+
+// 11. Calculate and print the mean canopy height within the ROI
+var meanCanopyHeight = forestAreas.reduceRegion({
+  reducer: ee.Reducer.mean(),
+  geometry: geometry,
+  scale: 100
+}).values().get(0);
+print('Mean Canopy Height:', meanCanopyHeight);
+
+// 12. Calculate and print the maximum canopy height within the ROI
+var maxCanopyHeight = forestAreas.reduceRegion({
+  reducer: ee.Reducer.max(),
+  geometry: geometry,
+  scale: 100
+}).values().get(0);
+print('Max Canopy Height:', maxCanopyHeight);
+
+// 13. Calculate and print the minimum canopy height within the ROI
+var minCanopyHeight = forestAreas.reduceRegion({
+  reducer: ee.Reducer.min(),
+  geometry: geometry,
+  scale: 100
+}).values().get(0);
+print('Min Canopy Height:', minCanopyHeight);
+ 
+// 14. Calculate and print the 99th percentile canopy height within the ROI
+var canopyHeight99thPercentile = forestAreas.reduceRegion({
+  reducer: ee.Reducer.percentile([99]),
+  geometry: geometry,
+  scale: 100
+}).values().get(0);
+print('Percentile Canopy Height:', canopyHeight99thPercentile);
+
+// Displays a histogram of canopy height values within the ROI. 
+// Calculates and prints the mean, maximum, and 99th percentile canopy height within the ROI.
+
+// 15. Create a constant image with value 0 for Canopy Height Classification (Classifying Canopy Height and Visualizing)
+var baseImage = ee.Image.constant(0);
+
+// 16. Classify the forest areas into four classes based on canopy height
+var class1 = baseImage.where(forestAreas.lt(5), 1);
+Map.addLayer(class1.clip(geometry), [], 'Canopy Height 0 to 5 meters', false);
+// class1: Canopy Height ranging from 0 to 5 meters
+
+var class2 = class1.where(forestAreas.gte(5).and(forestAreas.lt(10)), 2);
+Map.addLayer(class2.clip(geometry), [], 'Canopy Height 5 to 10 meters', false);
+// class2: Canopy Height ranging from 5 to 10 meters
+
+var class3 = class2.where(forestAreas.gte(10).and(forestAreas.lt(20)), 3);
+Map.addLayer(class3.clip(geometry), [], 'Canopy Height 10 to 20 meters', false);
+// class3: Canopy Height ranging from 10 to 20 meters
+
+var class4 = class3.where(forestAreas.gte(20), 4);
+Map.addLayer(class4.clip(geometry), [], 'Canopy Height greater than 20 meters', false);
+// class4: Canopy Height greater than 20 meters
+
+// 17. Add the classified canopy height image to the map with color palette
+Map.addLayer(class4.clip(geometry), {
+  min: 0,
+  max: 4,
+  palette: ['black', 'red', 'orange', 'green', 'blue']
+}, 'Classified Canopy Height');
+
+// Creates a constant image and classifies the forest areas into four classes based on canopy height. 
+// The classified image is then visualized on the map.
+
+
+// 18. Export the classified canopy height image to Google Drive (Exporting the Classified Canopy Height Image)
+Export.image.toDrive({
+  image: class4.clip(geometry),
+  description: 'Canopy_Height_Classified',
+  scale: 30,
+  region: geometry.bounds(),//.geometry
+  maxPixels: 1e13,
+  crs: class4.projection().crs().getInfo(),
+  folder: 'test'
+});
