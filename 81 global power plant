@@ -1,0 +1,173 @@
+var geometry = 
+    /* color: #ff0000 */
+    /* shown: false */
+    ee.Geometry.Point([52.86797221665677, 33.71767573161198]);
+
+
+
+
+
+
+var fvLayer = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry)
+Map.addLayer(fvLayer,[],'country');
+
+
+// Use the WRI Global Power Plant Database
+var table = ee.FeatureCollection('projects/sat-io/open-datasets/global_power_plant_DB_1-3')
+// Select features for a country
+var country = 'Iran';
+var filtered = table
+  .filter(ee.Filter.eq('country_long', country));
+print(filtered.first());
+
+// We want to calculate total installed capacity
+// by each fuel type
+// We use a Grouped Reducer to sum 'capacity_mw'
+// values grouped by 'primary_fuel'
+var stats = filtered.reduceColumns({
+  selectors: ['capacity_mw', 'primary_fuel'],
+  reducer: ee.Reducer.sum().setOutputs(['capacity_mw']).group({
+      groupField: 1,
+      groupName: 'primary_fuel',
+    })
+});
+
+// Post-process the result into a FeatureCollection
+var groupStats = ee.List(stats.get('groups'));
+var groupFc = ee.FeatureCollection(groupStats.map(function(item) {
+  return ee.Feature(null, item);
+}));
+
+// Create a chart
+var chart = ui.Chart.feature.byFeature({
+  features: groupFc,
+  xProperty: 'primary_fuel',
+  yProperties: ['capacity_mw']
+}).setChartType('ColumnChart')
+  .setOptions({
+    title: 'Installed Power Generation Capacity by Fuel Type for ' + country,
+    vAxis: {
+      title: 'Capacity (MW)',
+      format: 'short' 
+    },
+    hAxis: {
+      title: 'Type of Fuel'},
+    backgroundColor: '#feedde',
+    colors: ['#d94801'],
+    legend: { position: 'none' },
+  });
+print(chart);
+
+// Visualization for WRI/GPPD/power_plants
+
+var table = ee.FeatureCollection('WRI/GPPD/power_plants')
+
+// Get a color from a fuel
+var fuelColor = ee.Dictionary({
+  'Coal': '000000',
+  'Oil': '593704',
+  'Gas': 'bc80bd',
+  'Hydro': '0565A6',
+  'Nuclear': 'e31a1c',
+  'Solar': 'ff7f00',
+  'Waste': '6a3d9a',
+  'Wind': '5ca2d1',
+  'Geothermal': 'fdbf6f',
+  'Biomass': '229a00'
+});
+
+// List of fuels to add to the map
+var fuels = [
+    'Coal', 'Oil', 'Gas', 'Hydro', 'Nuclear',
+    'Solar', 'Waste', 'Wind', 'Geothermal', 'Biomass'];
+
+/**
+ * Computes size from capacity and color from fuel type.
+ *
+ * @param {!ee.Geometry.Point} pt A point
+ * @return {!ee.Geometry.Point} Input point with added style dictionary.
+ */
+function addStyle(pt) {
+  var size = ee.Number(pt.get('capacitymw')).sqrt().divide(10).add(2);
+  var color = fuelColor.get(pt.get('fuel1'));
+  return pt.set(
+      'styleProperty', ee.Dictionary({'pointSize': size, 'color': color}));
+}
+
+// Make a FeatureCollection out of the power plant data table.
+var pp = ee.FeatureCollection(table).map(addStyle);
+print(pp.first());
+
+/**
+ * Adds power plants of a certain fuel type to the map.
+ *
+ * @param {string} fuel A fuel type
+ */
+function addLayer(fuel) {
+  print(fuel);
+  Map.addLayer(
+      pp.filter(ee.Filter.eq('fuel1', fuel))
+          .style({styleProperty: 'styleProperty', neighborhood: 50}),
+      {}, fuel, true, 0.65);
+}
+
+// Apply `addLayer` to each record in `fuels`.
+fuelColor.keys().evaluate(function(fuelsList) {
+  fuelsList.map(addLayer);
+});
+
+
+// Define the palette and labels
+var palette = ['#000000', '#593704', '#bc80bd', '#0565A6', '#e31a1c', '#ff7f00', '#6a3d9a', '#5ca2d1', '#fdbf6f', '#229a00'];
+var labels = ['Coal', 'Oil', 'Gas', 'Hydro', 'Nuclear', 'Solar', 'Waste', 'Wind', 'Geothermal', 'Biomass'];
+
+// Create the legend
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',
+    padding: '8px 15px'
+  }
+});
+
+// Title for the legend
+var legendTitle = ui.Label({
+  value: 'Type of power plant ',
+  style: {
+    fontWeight: 'bold',
+    fontSize: '16px',
+    margin: '0 0 10px 0',
+    padding: '0'
+  }
+});
+legend.add(legendTitle);
+
+// Function to create a legend item
+var makeLegendItem = function(color, name) {
+  var colorBox = ui.Label({
+    style: {
+      backgroundColor: color,
+      padding: '8px',
+      margin: '0 0 4px 0'
+    }
+  });
+
+  var description = ui.Label({
+    value: name,
+    style: {
+      margin: '0 0 4px 6px'
+    }
+  });
+
+  return ui.Panel({
+    widgets: [colorBox, description],
+    layout: ui.Panel.Layout.Flow('horizontal')
+  });
+};
+
+// Add each color and label to the legend
+for (var i = 0; i < palette.length; i++) {
+  legend.add(makeLegendItem(palette[i], labels[i]));
+}
+
+// Add the legend to the map
+Map.add(legend);
