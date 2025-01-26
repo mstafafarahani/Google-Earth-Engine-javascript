@@ -1,0 +1,171 @@
+var geometry = 
+    /* color: #98ff00 */
+    /* shown: false */
+    ee.Geometry.Polygon(
+        [[[53.97989281502829, 37.152415647778525],
+          [51.51895531502829, 37.53671675814551],
+          [49.40958031502829, 37.50186160722301],
+          [49.89297875252829, 38.81486710144055],
+          [47.91543969002829, 39.29262739446619],
+          [47.43204125252829, 37.78024656543806],
+          [48.79434594002829, 35.952198391872905],
+          [52.66153344002829, 35.237522540676224],
+          [56.61661156502829, 37.04726523296096],
+          [55.95743187752829, 37.884371779066356]]]);
+// 3. Center the map on the  region of interest (ROI)---------------------------------------------------
+Map.centerObject(geometry, 9); // Centering on area with zoom level 9
+Map.addLayer(geometry, {}, "Study Area )");
+
+// 4. Load the biomass carbon density dataset, select the above-ground biomass (AGB) band, and convert it to an integer-----------------------------------
+var agbDataset = ee.ImageCollection("NASA/ORNL/biomass_carbon_density/v1")
+  .select('agb').first().toInt(); // Above-ground biomass (AGB)
+print(agbDataset);
+
+// 5. Define the time period for the analysis (2010-2011)------------------------------------------------------
+var startYear = '2010-01-01';
+var endYear = '2011-12-31';
+
+// 6. Load the MODIS NDVI and EVI dataset, filter by date and month, scale the values, and calculate the median-----------------------------------------
+var vegetationIndices = ee.ImageCollection("MODIS/061/MOD13Q1")
+  .select('NDVI', 'EVI')
+  .filterDate(startYear, endYear)
+  .filter(ee.Filter.calendarRange(5, 9, 'month'))
+  .map(function(image) {
+    return image.multiply(0.0001)
+      .copyProperties(image, image.propertyNames());
+  }).median();
+print(vegetationIndices);
+
+// 7. Add the NDVI and EVI layer to the map, clipped to the ROI -------------------------------------------------------
+Map.addLayer(vegetationIndices.clip(geometry), {}, 'Vegetation Indices', false);
+
+// 8. Load the MODIS LAI and FPAR dataset, filter by date and month, scale the values, and calculate the median-------------------------------------------
+var laiFparDataset = ee.ImageCollection("MODIS/061/MOD15A2H")
+  .select('Lai_500m', 'Fpar_500m')
+  .filterDate(startYear, endYear)
+  .filter(ee.Filter.calendarRange(5, 9, 'month'))
+  .map(function(image) {
+    var lai = image.select('Lai_500m').multiply(0.1);
+    var fpar = image.select('Fpar_500m').multiply(0.01);
+    return lai.addBands(fpar)
+      .copyProperties(image, image.propertyNames());
+  }).median();
+
+// 9. Add the LAI and FPAR layer to the map, clipped to the ROI-----------------------------------------------------------------
+Map.addLayer(laiFparDataset.clip(geometry), {}, 'LAI_FPAR', false);
+
+// 10. Load the MODIS Land Cover dataset and select the land cover type band---------------------------------------------------------------
+var landCover = ee.ImageCollection("MODIS/061/MCD12Q1")
+  .select('LC_Type1').mode();
+
+// 11. Load the DEM dataset for elevation data----------------------------------------------------------------------------------------
+var elevation = ee.Terrain.products(ee.Image("USGS/GTOPO30").select('elevation'));
+Map.addLayer(elevation.clip(geometry), {}, 'DEM', false);
+
+// 12. Combine all the datasets (AGB, NDVI, LAI, Land Cover) into a single image---------------------------------------
+var combinedDataset = ee.Image.cat([agbDataset, vegetationIndices, laiFparDataset, landCover]);
+print(combinedDataset);
+
+// 13. Create a training dataset by sampling the combined image within the  ROI---------------------------------------------
+var trainingData = combinedDataset.stratifiedSample({
+  numPoints: 100, 
+  classBand: 'agb', 
+  region: geometry, 
+  scale: 500
+});
+
+// 14. Train a Random Forest model using the training data----------------------------------------------------
+var randomForestModel = ee.Classifier.smileRandomForest(80).train({
+  features: trainingData, 
+  classProperty: 'agb', 
+  inputProperties: combinedDataset.bandNames()
+}).setOutputMode('REGRESSION');
+
+// 15. Define the predictors by removing the AGB band from the dataset------------------------------------------------------------------
+var predictors = combinedDataset.bandNames().remove('agb');
+
+// 16. Apply the trained model to predict AGB and rename the output band
+var agbPrediction = combinedDataset.select(predictors).classify(randomForestModel).rename('predicted_agb');
+
+// 17. Add the original and predicted AGB layers to the map, clipped to the ROI ----------------------------------------------
+Map.addLayer(combinedDataset.select('agb').clip(geometry), {}, 'Original AGB', false);
+Map.addLayer(agbPrediction.clip(geometry), {}, 'Predicted AGB', false);
+
+// 18. Calculate the Pearson correlation between the predicted and original AGB------------------------------------------------------------
+var correlation = agbPrediction.addBands(combinedDataset.select('agb')).reduceRegion({
+  reducer: ee.Reducer.pearsonsCorrelation(), 
+  geometry: geometry, 
+  scale: 10000
+});
+print(correlation);
+
+// 19. Calculate the R-squared value from the Pearson correlation---------------------------------------------------------------------------
+var rSquared = ee.Number(correlation.values().get(0)).pow(2);
+
+// 20. Print the Pearson correlation coefficient and R-squared value-----------------------------------------------------------
+print('Pearson Correlation:', correlation.values().get(0));
+print('R-squared:', rSquared);
+
+// 21. Prediction for the year 2020
+
+// 22. Load and preprocess the NDVI and EVI data for 2020---------------------------------------------------------
+var vegetationIndices2020 = ee.ImageCollection("MODIS/061/MOD13Q1")
+  .select('NDVI', 'EVI')
+  .filterDate('2020-01-01', '2021-12-31')
+  .filter(ee.Filter.calendarRange(5, 9, 'month'))
+  .map(function(image) {
+    return image.multiply(0.0001)
+      .copyProperties(image, image.propertyNames());
+  }).median();
+
+// 23. Load and preprocess the LAI and FPAR data for 2020-------------------------------------------------------------------
+var laiFpar2020 = ee.ImageCollection("MODIS/061/MOD15A2H")
+  .select('Lai_500m', 'Fpar_500m')
+  .filterDate('2020-01-01', '2021-12-31')
+  .filter(ee.Filter.calendarRange(5, 9, 'month'))
+  .map(function(image) {
+    var lai = image.select('Lai_500m').multiply(0.1);
+    var fpar = image.select('Fpar_500m').multiply(0.01);
+    return lai.addBands(fpar)
+      .copyProperties(image, image.propertyNames());
+  }).median();
+
+// 24. Combine the datasets for 2020----------------------------------------------------------------------------------------
+var combinedDataset2020 = ee.Image.cat([vegetationIndices2020, laiFpar2020, landCover]);
+
+// 25. Predict the AGB for 2020 using the trained model-------------------------------------------------------------------------------------------------------
+var agbPrediction2020 = combinedDataset2020.classify(randomForestModel).rename('agb_2020');
+
+// 26. Define a color palette from light green to dark green for the predicted AGB (2020)----------------------------------------------------
+var agb2020VisParams = {
+  min: 0,
+  max: 300,  // Adjust the max value based on your dataset---------------------------------------------------
+  palette: ['lightgreen', 'green', 'darkgreen']
+};
+
+// 27. Add the predicted AGB for 2020 to the map with color visualization-------------------------------------------------------------------------------------------------------
+Map.addLayer(agbPrediction2020.clip(geometry), agb2020VisParams, 'AGB 2020');
+
+// 28. Prediction for the year 2030
+
+// 29. Load and preprocess the NDVI and EVI data for 2030 (assuming similar process as 2020)---------------------------------------------------------------------------------
+var vegetationIndices2030 = vegetationIndices2020;  // Adjust data source for 2030 if available
+
+// 30. Load and preprocess the LAI and FPAR data for 2030 (assuming similar process as 2020)----------------------------
+var laiFpar2030 = laiFpar2020;  // Adjust data source for 2030 if available
+
+// 31. Combine the datasets for 2030----------------------------------
+var combinedDataset2030 = ee.Image.cat([vegetationIndices2030, laiFpar2030, landCover]);
+
+// 32. Predict the AGB for 2030 using the trained model-------------------------------
+var agbPrediction2030 = combinedDataset2030.classify(randomForestModel).rename('agb_2030');
+
+// 33. Define a color palette from yellow to green for the predicted AGB (2030)------------------------------------------------------------------------
+var agb2030VisParams = {
+  min: 0,
+  max: 300,  // Adjust the max value based on your dataset
+  palette: ['yellow', 'lightgreen', 'green']
+};
+
+//dd the predicted AGB for 2030o the map with color visualization-------------------------------------------------------------------------------------------------------
+Map.addLayer(agbPrediction2030.clip(geometry), agb2020VisParams, 'AGB 2030')
