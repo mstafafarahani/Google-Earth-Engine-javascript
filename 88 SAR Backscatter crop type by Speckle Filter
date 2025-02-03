@@ -1,0 +1,119 @@
+// video and code my youtube.com/@geemap        mstafa.farahani@gmail.com
+
+//  Crop Type Detection Using Sentinel-1 SAR Imagery in Google Earth Engine (L)
+
+// Define the coordinates for the area of interest (AOI)
+var geometry = /* color: #98ff00 */ee.Geometry.Polygon(
+        [[[49.64285810644917, 34.1433329891414],
+          [49.66208418066792, 34.153277524284846],
+          [49.68543012793354, 34.17429925808597],
+          [49.68405683691792, 34.18622818358686],
+          [49.67272718603901, 34.211500570260995],
+          [49.664144117191356, 34.237616871010744],
+          [49.65453108008198, 34.249253048460744],
+          [49.62981184180073, 34.250388199156475],
+          [49.60028608496479, 34.240171291665],
+          [49.581746656253856, 34.21178448662277],
+          [49.58929975683979, 34.17827575398414],
+          [49.59410627539448, 34.16137435234913],
+          [49.6145339792519, 34.145037849738905],
+          [49.63255842383198, 34.144043351904635],
+          [49.63702161963276, 34.14177017003853]]]);
+Map.addLayer(geometry, [], 'Study Area', false);
+
+// Center the map on the area of interest
+Map.centerObject(geometry, 9);
+
+// Define the time period for the analysis
+var startYear = '2024';
+var endYear = '2025';
+
+// Load the Sentinel-1 Ground Range Detected (GRD) ImageCollection
+var sentinel1Collection = ee.ImageCollection("COPERNICUS/S1_GRD")
+  .filterDate(startYear, endYear) // Filter by date range
+  .filterBounds(geometry) // Filter by geographical region
+  .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VV')) // Filter by VV polarization
+  .filter(ee.Filter.eq('instrumentMode', 'IW')) // Filter by Interferometric Wide Swath mode
+  .select('VV'); // Select the VV band
+print(sentinel1Collection)
+
+// Separate the images into ascending and descending orbit passes
+var ascendingPass = sentinel1Collection
+  .filter(ee.Filter.eq('orbitProperties_pass', 'ASCENDING'));
+print(ascendingPass)
+
+var descendingPass = sentinel1Collection
+  .filter(ee.Filter.eq('orbitProperties_pass', 'DESCENDING'));
+print(descendingPass)
+
+// Calculate the monthly average of the ascending and descending images
+var monthlySAR = ee.ImageCollection(ee.List.sequence(1, 12).map(function(month) {
+  var ascendingMonthly = ascendingPass.filter(ee.Filter.calendarRange(month, month, 'month')).mean().rename('ascending');
+  var descendingMonthly = descendingPass.filter(ee.Filter.calendarRange(month, month, 'month')).mean().rename('descending');
+  var date = ee.Date.fromYMD(2024, month, 1);
+  return ascendingMonthly.addBands(descendingMonthly)
+    .set('system:time_start', date.millis())
+    .set('system:index', date.format('YYYY-MM'));
+}));
+print(monthlySAR)
+
+// Apply speckle filtering to reduce noise
+var speckleFiltered = monthlySAR.map(function(image) {
+  return image.focalMean(30, 'square', 'meters') 
+// focalMean() is a method that applies a focal operation, 
+// which means it computes the mean (average) value of pixels within a specified neighborhood around each pixel.
+/* 
+1. '30': This is the radius of the neighborhood, specified in meters. 
+The filter will take the mean of all the pixels within a 30-meter radius around each target pixel.
+
+2. 'square': Specifies the shape of the neighborhood as a square.
+3. 'meters': Specifies the units for the radius, ensuring that the 30 refers to meters, not pixels.
+*/
+    .copyProperties(image, image.propertyNames());
+/*
+1. After applying the speckle filter, this part ensures that the metadata (properties) of the original image is retained in the filtered image.
+2. copyProperties(): Copies specified properties from the source image (image) to the output image.
+3. image.propertyNames(): Retrieves the list of all property names from the source image. 
+This includes metadata such as the image's acquisition date, orbit number, etc.
+*/
+});
+
+// Add the ascending and descending SAR layers to the map, clipped to the AOI
+Map.addLayer(speckleFiltered.select('ascending').toBands().clip(geometry), [], 'Ascending SAR', false);
+Map.addLayer(speckleFiltered.select('descending').toBands().clip(geometry), [], 'Descending SAR', false);
+
+
+
+// Generate and print a time-series chart of SAR backscatter values at the specified point
+print(
+  ui.Chart.image.series(speckleFiltered, geometry, ee.Reducer.first(), 10, 'system:time_start')
+    .setOptions({
+      title: 'SAR Backscatter Time Series',
+      vAxis: {title: 'Backscatter (dB)'},
+      hAxis: {title: 'Date'},
+      lineWidth: 1,
+      pointSize: 4
+    })
+);
+
+// Export the ascending SAR images to Google Drive
+Export.image.toDrive({
+  image: speckleFiltered.select('ascending').toBands().clip(geometry),
+  description: 'SAR_Ascending',
+  scale: 30,
+  region: geometry,
+  maxPixels: 1e13,
+  crs: 'EPSG:4326',
+  folder: 'Crop_Type_Analysis_Ascending'
+});
+
+// Export the descending SAR images to Google Drive
+Export.image.toDrive({
+  image: speckleFiltered.select('descending').toBands().clip(geometry),
+  description: 'SAR_Descending',
+  scale: 30,
+  region: geometry,
+  maxPixels: 1e13,
+  crs: 'EPSG:4326',
+  folder: 'Crop_Type_Analysis_Descending'
+});
