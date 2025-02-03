@@ -1,0 +1,134 @@
+//	Video & Code   YouTube.com/@Geemap             mstafa.farahani@gmail.com
+
+
+
+
+// Center the map on the study area
+Map.centerObject(geometry);
+
+// Define the study area as a polygon
+var geometry = 
+    /* color: #0b4a8b */
+    /* shown: false */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[58.13200841448245, 25.564253129928467],
+          [58.13200841448245, 25.552560926890994],
+          [58.19492230913577, 25.552560926890994],
+          [58.19492230913577, 25.564253129928467]]], null, false);
+
+// Load Landsat Image Collections from different satellites
+var l8 = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2"), // Landsat 8
+    l4 = ee.ImageCollection("LANDSAT/LT04/C02/T1_L2"), // Landsat 4
+    l5 = ee.ImageCollection("LANDSAT/LT05/C02/T1_L2"), // Landsat 5
+    l7 = ee.ImageCollection("LANDSAT/LE07/C02/T1_L2"), // Landsat 7
+    l9 = ee.ImageCollection("LANDSAT/LC09/C02/T1_L2"); // Landsat 9
+
+// List of years for coastline change analysis
+var yearList = [1990, 1995, 2000, 2005, 2010, 2015, 2020, 2023];
+
+// Function to filter ImageCollection based on date and geometry
+function filterCol(col, geometry, date){
+  return col.filterDate(date[0], date[1]).filterBounds(geometry);
+}
+
+// Function to create a composite image from Landsat 4, 5, and 7
+function landsat457(geometry, date){
+  var col = filterCol(l4, geometry, date).merge(filterCol(l5, geometry, date)).merge(filterCol(l7, geometry, date));
+  var image = col.map(cloudMaskTm).median().clip(geometry);
+  return image;
+}
+
+// Function to create a composite image from Landsat 8 and 9
+function landsat89(geometry, date){
+  var col = filterCol(l8, geometry, date).merge(filterCol(l9, geometry, date));
+  var image = col.map(cloudMaskOli).median().clip(geometry);
+  return image;
+}
+
+// Cloud masking for Landsat 4, 5, and 7
+function cloudMaskTm(image){
+  var qa = image.select('QA_PIXEL');
+  var mask = qa.bitwiseAnd(1 << 3).eq(0) // Cloud
+    .and(qa.bitwiseAnd(1 << 4).eq(0)); // Shadow
+  return image.select(['SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B7'], 
+                      ['B2', 'B3', 'B4', 'B5', 'B6', 'B7']).updateMask(mask);
+}
+
+// Cloud masking for Landsat 8 and 9
+function cloudMaskOli(image){
+  var qa = image.select('QA_PIXEL');
+  var mask = qa.bitwiseAnd(1 << 3).eq(0) // Cloud
+    .and(qa.bitwiseAnd(1 << 4).eq(0)); // Shadow
+  return image.select(['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'SR_B7'], 
+                      ['B2', 'B3', 'B4', 'B5', 'B6', 'B7']).updateMask(mask);
+}
+
+// Generate coastline images for each year
+var coastCol = ee.ImageCollection(yearList.map(function(year){
+  var start, end, landsat;
+  
+  // Define Landsat collection and time range
+  if (year < 2014) {
+    start = ee.Date.fromYMD(year - 1 , 1, 1);
+    end = ee.Date.fromYMD(year + 1, 12, 31);
+    landsat = landsat457;
+  } else {
+    start = ee.Date.fromYMD(year , 1, 1);
+    end = ee.Date.fromYMD(year, 12, 31);
+    landsat = landsat89;
+  }
+  
+  var date = [start, end];
+  
+  // Create an image composite and apply scale factor
+  var image = landsat(geometry, date).multiply(0.0000275).add(-0.2);
+  
+  // Add the Landsat image to the map
+  Map.addLayer(image, { min: [0.1, 0.05, 0], max: [0.4, 0.3, 0.2], bands: ['B5', 'B6', 'B2'] }, 'Landsat_' + year, false);
+  
+  // Compute Normalized Difference Water Index (NDWI)
+  var ndwi = image.expression('(GREEN - NIR) / (GREEN + NIR)', { 
+    GREEN: image.select('B3'), 
+    NIR: image.select('B5') 
+  }).rename('NDWI');
+  
+  Map.addLayer(ndwi, { min: -1, max: 1, palette: ['red', 'white', 'blue'] }, 'NDWI_' + year, false);
+
+  // Extract land and water masks
+  var land = ndwi.lt(0.1).selfMask();
+  var water = ndwi.gte(0.1).selfMask();
+  
+  Map.addLayer(land, { palette: 'gold' }, 'Land_' + year, false);
+  Map.addLayer(water, { palette: 'navy' }, 'Water_' + year, false);
+  
+  return land.multiply(year).rename('coast').toUint16();
+}));
+
+// Define visualization parameters for coastline change
+var vis = {
+  'coast_class_values': yearList,
+  'coast_class_palette': ['800080', '0000FF', '00FFFF', '228B22', 'FFD700', 'FF8C00', 'FF0000','252524']
+};
+
+// Compute maximum coastline change
+var coastalChange = coastCol.max().set(vis);
+Map.addLayer(coastalChange, {}, 'Coastline Change');
+
+// Create a legend panel for coastline years
+var panel = ui.Panel([ui.Label('Coastline Change')], ui.Panel.Layout.flow('vertical'), { position: 'bottom-left' });
+
+vis.coast_class_values.map(function(value, index){
+  panel.add(ui.Panel(
+    [
+      ui.Label('', { width: '30px', height: '20px', backgroundColor: vis.coast_class_palette[index] }),
+      ui.Label(value, { height: '20px' })
+    ], 
+    ui.Panel.Layout.flow('horizontal')
+  ));
+});
+Map.add(panel);
