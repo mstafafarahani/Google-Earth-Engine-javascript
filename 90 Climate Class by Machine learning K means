@@ -1,0 +1,136 @@
+// youtube.com/@geemap
+
+// Historical Climate Classification Using ERA5 & MODIS Terra Dataset Using K-Means Clustering Model in Google Earth Engine
+
+// 1. Define the region of interest using coordinates (bounding box)
+var regionCoords = [
+  [67.55344223919161, 25.105736758749053],
+  [67.55344223919161, 6.250039242624334],
+  [91.63547348919161, 6.250039242624334],
+  [91.63547348919161, 25.105736758749053]
+];
+
+// 2. Create the geometry object (polygon) from coordinates
+var regionGeometry = ee.Geometry.Polygon(regionCoords);
+Map.addLayer(regionGeometry, {}, 'study area', false);
+
+// 3. Center the map on the region of interest
+Map.centerObject(regionGeometry, 4);
+
+// 4. Load ECMWF ERA5-Land climate data for the period 2000-2020
+var era5Data = ee.ImageCollection("ECMWF/ERA5_LAND/MONTHLY_AGGR")
+  .filterDate('2000', '2020');
+
+// 5. Select temperature and precipitation bands from the dataset
+var climateVariables = era5Data.select('temperature_2m', 'total_precipitation_sum');
+print(climateVariables)
+
+// 6. Combine climate variables into a single image stack (bands)
+var climateImageStack = climateVariables.toBands();
+print(climateImageStack)
+// Stacks the temperature and precipitation bands into a single image for processing. 
+// Stacking is necessary for multi-variable clustering.
+
+// 7. Sample the climate data to get training data for clustering
+var trainingSample = climateImageStack.sample({
+  region: regionGeometry, 
+  scale: 10000, 
+  numPixels: 100
+});
+
+// 8. Train a K-Means clustering model with 4 clusters
+var kMeansModel = ee.Clusterer.wekaKMeans(4).train(trainingSample);
+
+// 9. Apply the model to classify the climate data into clusters or classes
+var climateClassification = climateImageStack.cluster(kMeansModel).rename('climate_clusters');
+
+// 10. Display the classified climate map, clipped to the region of interest
+Map.addLayer(climateClassification.clip(regionGeometry), {min: 0, max: 3, Palette: ['blue', 'red', 'orange', 'green']}, 'Climate Classification', false);
+
+// 11. Export the classified climate map to Google Drive
+Export.image.toDrive({
+  image: climateClassification,
+  description: 'climate_classification_map',
+  scale: 10000,
+  region: regionGeometry,
+  crs: 'EPSG:4326',
+  folder: 'Climate_Analysis'
+});
+
+// 12. Calculate the area in square kilometers for each climate class
+var areaCalculation = ee.Image.pixelArea().divide(1e6).addBands(climateClassification);
+print(areaCalculation)
+
+// 13. Plot a chart to show the area for each climate class
+print(
+  ui.Chart.image.byClass({
+    image: areaCalculation,
+    classBand: 'climate_clusters',
+    region: regionGeometry,
+    reducer: ee.Reducer.sum(),
+    scale: 10000
+  }).setOptions({
+    title: 'Area per Climate Class (sq.km)',
+    hAxis: {title: 'Climate Classes'},
+    vAxis: {title: 'Area (sq.km)'}
+  })
+);
+
+// 14. Calculate mean temperature in Celsius (convert from Kelvin)
+var avgTemperature = era5Data.select('temperature_2m').mean().subtract(273.15);
+
+// 15. Create a temperature map with the classified climate data
+var tempWithClassification = avgTemperature.addBands(climateClassification);
+
+// 16. Calculate temperature statistics (min, max) for each climate class
+var temperatureStats = tempWithClassification.reduceRegion({
+  reducer: ee.Reducer.minMax().group(1),
+  geometry: regionGeometry,
+  scale: 10000
+});
+
+/*
+reducer: ee.Reducer.minMax():
+ee.Reducer.minMax() is the reducer applied to the image. It calculates the minimum and maximum values for each pixel. 
+In this case, it computes the minimum and maximum temperature for each climate class.
+
+.group(1):
+The .group(1) modifier is used to group the results by a certain class or category. 
+Here, it groups the calculated statistics by climate class (the second band in tempWithClassification).
+The number 1 represents the band index for climate class in the image stack, 
+which means that the temperature statistics will be calculated for each distinct class (e.g., class 0, class 1, etc.).
+*/
+
+print('Temperature Statistics by Climate Class:', temperatureStats);
+
+// 17. Select only the pixels classified as class 0
+var classZeroMask = climateClassification.eq(0);
+
+// 18. Load MODIS NDVI data for the region and time period
+var modisNDVI = ee.ImageCollection("MODIS/061/MOD13A1")
+  .filterDate('2002', '2020')
+  .map(function(image) {
+    var ndviBand = image.select('NDVI').multiply(0.0001); // Scale NDVI values
+    return ndviBand.updateMask(classZeroMask) // Apply the class 0 mask
+      .copyProperties(image, image.propertyNames());
+  });
+
+// 19. Generate a time series chart of mean NDVI for class 0
+print(
+  ui.Chart.image.series({
+    imageCollection: modisNDVI,
+    region: regionGeometry,
+    reducer: ee.Reducer.mean(),
+    scale: 10000,
+    xProperty: 'system:time_start'
+  }).setOptions({
+    title: 'NDVI Time Series for Class 0 (2002-2020)',
+    hAxis: {title: 'Date'},
+    vAxis: {title: 'Mean NDVI'},
+    series: {
+      0: {color: 'green'}  // Set the color of the NDVI line to green
+    }
+  })
+);
+Map.addLayer(modisNDVI)
+
