@@ -1,5 +1,4 @@
 //vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com
-var geometry = /* color: #98ff00 */ee.Geometry.Point([-96.00472525031863, 30.56351229215107]);
 
 
 /*YOu CAN USE city ,
@@ -89,7 +88,7 @@ var classAreaList = classAreas.map(function(item) {
   var classColor = classColors.get(classNumber);
   // Create a feature with geometry and 
   // required data as a dictionary
-  return ee.Feature(provinceORstate, {
+  return ee.Feature(geometry, {
     'class': classNumber,
     'class_name': className,
     'Area': classArea,
