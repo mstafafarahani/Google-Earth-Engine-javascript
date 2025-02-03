@@ -1,0 +1,123 @@
+// remember video and code in my youtube.com/@geemap if you have question  mstafa.farahani@gmail.com
+
+
+// Define the study area as a polygon (coordinates for a specific region)
+var geometry = /* color: #0B4A8B */ee.Geometry.Polygon(
+        [[[48.28644340153048, 31.997058599848128],
+          [48.28644340153048, 31.60256246954714],
+          [49.17358939762423, 31.60256246954714],
+          [49.17358939762423, 31.997058599848128]]], null, false);
+
+// Center the map on the defined geometry
+Map.centerObject(geometry);
+
+// Function to compute NDVI for Landsat TM/ETM (Bands 4 and 3)
+function ndvi_tm_etm(img){
+  var bands = img.multiply(0.0000275).add(-0.2); // Scale reflectance
+  var ndvi = bands.normalizedDifference(['SR_B4','SR_B3']).rename('ndvi'); // NDVI calculation
+  return ndvi.copyProperties(img, img.propertyNames()); // Copy properties to the image
+}
+
+// Landsat 4 data processing (1982 - 1994)
+var landsat4 = ee.ImageCollection("LANDSAT/LT04/C02/T1_L2")
+  .select('SR_B.*')
+  .filterDate('1982', '1994')
+  .filterBounds(geometry)
+  .filter(ee.Filter.lt('CLOUD_COVER', 45))
+  .filter(ee.Filter.eq('WRS_PATH', 165))
+  .filter(ee.Filter.eq('WRS_ROW', 38))
+  .map(ndvi_tm_etm);
+print(landsat4)
+
+// Landsat 5 data processing (1984 - 2013)
+var landsat5 = ee.ImageCollection("LANDSAT/LT05/C02/T1_L2")
+  .select('SR_B.*')
+  .filterDate('1984', '2013')
+  .filterBounds(geometry)
+  .filter(ee.Filter.lt('CLOUD_COVER', 45))
+  .filter(ee.Filter.eq('WRS_PATH', 165))
+  .filter(ee.Filter.eq('WRS_ROW', 38))
+  .map(ndvi_tm_etm);
+print(landsat5)
+
+// Landsat 7 data processing before SLC failure (1999 - May 30, 2003)
+var landsat7_slcon = ee.ImageCollection("LANDSAT/LE07/C02/T1_L2")
+  .select('SR_B.*')
+  .filterDate('1999', '2003-05-30')
+  .filterBounds(geometry)
+  .filter(ee.Filter.lt('CLOUD_COVER', 45))
+  .filter(ee.Filter.eq('WRS_PATH', 165))
+  .filter(ee.Filter.eq('WRS_ROW', 38))
+  .map(ndvi_tm_etm);
+print(landsat7_slcon)
+// Function to correct for SLC-off (Scan Line Corrector failure) in Landsat 7 after 2003
+function slc_off(img){
+  var bands = img.multiply(0.0000275).add(-0.2); // Scale reflectance
+  var ndvi = bands.normalizedDifference(['SR_B4','SR_B3']).rename('ndvi'); // NDVI calculation
+  var filter = ndvi.focalMedian(1, 'square', 'pixels', 10); // Focal median filter to fill gaps
+  var filled = filter.blend(ndvi).rename('ndvi'); // Blend filtered and original NDVI
+  return filled.copyProperties(img, img.propertyNames()); // Copy properties to the image
+}
+
+// Landsat 7 data processing after SLC failure (June 1, 2003 - 2024)
+var landsat7_slcoff = ee.ImageCollection("LANDSAT/LE07/C02/T1_L2")
+  .select('SR_B.*')
+  .filterDate('2003-06-01', '2024')
+  .filterBounds(geometry)
+  .filter(ee.Filter.lt('CLOUD_COVER', 45))
+  .filter(ee.Filter.eq('WRS_PATH', 165))
+  .filter(ee.Filter.eq('WRS_ROW', 38))
+  .map(slc_off);
+print(landsat7_slcoff)
+// Add a layer for the Landsat 7 SLC-off corrected data (2005-2006)
+Map.addLayer(landsat7_slcoff.filterDate('2005', '2006').toBands().clip(geometry), [], 'slc_off_filled', false);
+
+// Function to compute NDVI for Landsat OLI (Bands 5 and 4 for Landsat 8 and 9)
+function ndvi_oli(img){
+  var bands = img.multiply(0.0000275).add(-0.2); // Scale reflectance
+  var ndvi = bands.normalizedDifference(['SR_B5','SR_B4']).rename('ndvi'); // NDVI calculation
+  return ndvi.copyProperties(img, img.propertyNames()); // Copy properties to the image
+}
+
+// Landsat 8 data processing (2013 - 2024)
+var landsat8 = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2")
+  .select('SR_B.*')
+  .filterDate('2013', '2024')
+  .filterBounds(geometry)
+  .filter(ee.Filter.lt('CLOUD_COVER', 45))
+  .filter(ee.Filter.eq('WRS_PATH', 165))
+  .filter(ee.Filter.eq('WRS_ROW', 38))
+  .map(ndvi_oli);
+print (landsat8)
+// Landsat 9 data processing (2021 - 2024)
+var landsat9 = ee.ImageCollection("LANDSAT/LC09/C02/T1_L2")
+  .select('SR_B.*')
+  .filterDate('2021', '2024')
+  .filterBounds(geometry)
+  .filter(ee.Filter.lt('CLOUD_COVER', 45))
+  .filter(ee.Filter.eq('WRS_PATH', 165))
+  .filter(ee.Filter.eq('WRS_ROW', 38))
+  .map(ndvi_oli);
+print(landsat9)
+// Merge all Landsat collections into one
+var landsat_collections = landsat4.merge(landsat5)
+  .merge(landsat7_slcon).merge(landsat7_slcoff).merge(landsat8).merge(landsat9)
+  .sort('system:time_start');
+
+// Plot NDVI over time for the study area
+print(
+  ui.Chart.image.series(landsat_collections, 
+  geometry, ee.Reducer.first(), 100, 'system:time_start')
+);
+
+// Export the selected images (2010 - 2011) to Google Drive
+Export.image.toDrive({
+  image: landsat_collections
+    .filterDate('2010', '2011').toBands().clip(geometry).float(), // Extract bands and clip to study area
+  description: 'landsat2010', 
+  scale: 30, // Spatial resolution (30 meters)
+  crs: 'EPSG:4326', // Coordinate reference system
+  maxPixels: 1e13, // Allow large images
+  region: geometry, // Define the region to export
+  folder: 'test' // Google Drive folder name
+});
