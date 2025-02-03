@@ -1,0 +1,118 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com
+var geometry = /* color: #98ff00 */ee.Geometry.Point([-96.00472525031863, 30.56351229215107]);
+
+
+/*YOu CAN USE city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry) //boundary city
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(provinceORstate)
+*/
+
+// Define the country boundary using FAO/GAUL dataset and filter by geometry
+/*var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,4)*/
+
+
+
+
+
+
+
+
+
+
+
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(provinceORstate)
+Map.centerObject(geometry,3)
+
+var worldcover = ee.Image("CSP/ERGo/1_0/US/lithology").select('b1').clip(provinceORstate)
+
+print(worldcover)
+// The image has 11 classes
+// Remap the class values to have continuous values
+// from 0 to 10
+var classified = worldcover.remap(
+  [0,1,3,4,5,7,8,9,10,11,13,14,15,16,17,18,19,20],
+  [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]).rename('classification');
+
+// Define a list of class names
+var worldCoverClassNames= ['Water','Carbonate','Non-carbonate','Alkaline intrusive','Silicic residual','Extrusive volcanic','Colluvial sediment','Glacial till clay','Glacial till loam','Glacial till coarse','Glacial lake sediment fine','Glacial outwash coarse','Hydric','Eolian sediment coarse','Eolian sediment fine','Saline lake sediment','Alluvium and coastal sediment fine','Coastal sediment coarse']
+// Define a list of class colors
+var worldCoverPalette = ['356eff','acb6da','d6b879','313131','eda800','616161','d6d6d6','d0ddae','b8d279','d5d378','141414','6db155','9b6d55','feeec9','d6b879','00b7ec','ffda90','f8b28c']
+// We define a dictionary with class names
+var classNames = ee.Dictionary.fromLists(
+  ['0','1','2','3','4','5','6','7','8','9', '10','11','12','13','14','15','16','17'],
+  worldCoverClassNames
+);
+// We define a dictionary with class colors
+var classColors = ee.Dictionary.fromLists(
+  ['0','1','2','3','4','5','6','7','8','9', '10','11','12','13','14','15','16','17'],
+  worldCoverPalette
+);
+var visParams = {min:0, max:17, palette: worldCoverPalette};
+Map.addLayer(classified, visParams, 'Landcover');
+
+// Create an area image and convert to Hectares
+var areaImage = ee.Image.pixelArea().divide(1e6);
+
+// Add the band containing classes
+var areaImageWithClass = areaImage.addBands(classified)
+
+
+
+// Use a Grouped Reducer to calculate areas
+var areas = areaImageWithClass.reduceRegion({
+      reducer: ee.Reducer.sum().group({
+      groupField: 1,
+      groupName: 'classification',
+    }),
+    geometry: provinceORstate,
+    scale: 17,
+    maxPixels: 1e10
+    }); 
+ 
+var classAreas = ee.List(areas.get('groups'));
+
+// Process results to extract the areas and
+// create a FeatureCollection
+var classAreaList = classAreas.map(function(item) {
+  var areaDict = ee.Dictionary(item);
+  var classNumber = areaDict.getNumber('classification').format();
+  var classArea = areaDict.getNumber('sum');
+  var className = classNames.get(classNumber);
+  var classColor = classColors.get(classNumber);
+  // Create a feature with geometry and 
+  // required data as a dictionary
+  return ee.Feature(provinceORstate, {
+    'class': classNumber,
+    'class_name': className,
+    'Area': classArea,
+    'color': classColor
+  });
+});
+
+
+var classAreaFc = ee.FeatureCollection(classAreaList);
+//print('Class Area (FeatureCollection)', classAreaFc);
+
+// We can now chart the resulting FeatureCollection
+// If your area is large, it is advisable to first Export
+// the featurecolleciton as an Asset and import it once
+// the export is finished.
+var chart = ui.Chart.feature.byFeature({
+  features: classAreaFc,
+  xProperty: 'class_name',
+  yProperties: ['Area']
+}).setChartType('PieChart')
+.setOptions({
+  title: 'Area by class',
+});
+
+print(chart);
+
