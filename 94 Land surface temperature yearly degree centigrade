@@ -1,0 +1,176 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com
+var geometry = 
+    /* color: #ffc82d */
+    /* shown: false */
+    ee.Geometry.Point([15.830915377141354, 63.60364273013792]);
+/*YOu CAN USE city boundary and run this code only for your  city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+YOu CAN USE province boundary and run this code only for your  province
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+//YOu CAN USE country boundary and run this code only for your  country
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,3)
+
+
+
+var time_start = '1950', time_end = '2020'
+
+var era5 = ee.ImageCollection("ECMWF/ERA5_LAND/MONTHLY_AGGR")
+.select('temperature_2m')
+.filterDate(time_start, time_end);
+
+
+
+function temporal_collection(collection, start, count, interval, unit){
+  var seq = ee.List.sequence(0, ee.Number(count).subtract(1));
+  var origin_date = ee.Date(start);
+  return ee.ImageCollection(seq.map(function(i){
+    var start_date = origin_date.advance(ee.Number(interval).multiply(i), unit);
+    var end_date = origin_date.advance(ee.Number(interval).multiply(ee.Number(i).add(1)), unit);
+    return collection.filterDate(start_date, end_date).mean()
+    .set('system:time_start', start_date.millis())
+    .set('system:time_end', end_date.millis())
+    }))
+  }
+  
+  
+  
+  
+var annual = temporal_collection(era5, time_start, 70, 1, 'year')
+.map(function(img){
+  return img.subtract(273.15).clip(country)// convert kelvin to centigrade  and choose the country Sweden
+  .copyProperties(img, img.propertyNames())
+  });
+
+
+
+// Create a time series chart showing LST   growth
+print(ui.Chart.image.series({
+  imageCollection: annual ,
+  region: country,
+  reducer: ee.Reducer.first(), //function .first() tell us you have 1 image only for 1 year or one day  or one month
+  scale: 10000,
+  xProperty: 'system:time_start' 
+}).setSeriesNames(['annual LST    Growth '])
+.setOptions({
+  title: 'annual LST  Growth',
+  hAxis: {title: 'Year'},
+  vAxis: {title: '(degree centigrade)'},
+  interpolateNulls: true,
+  lineWidth: 1,
+  pointSize: 2,
+  curveType: 'function'
+}));
+
+
+print(annual.size())
+Map.addLayer(annual.mean(),{min:0,max:2 ,palette:['#00007f', '#0000ff', '#007fff', '#00ffff', '#7fff7f', '#ffff00', '#ff7f00', '#ff0000', '#7f0000']},'annual LST  Growth ')
+
+
+// get the percent of changes
+var temp_mean = annual.mean();
+// eq = ((temp - mean)/(mean)) * 100
+
+
+var change = annual.map(function(img){
+  var eq = img.expression('((temp - mean)/(mean)) * 100',{
+    'temp': img, 'mean': temp_mean
+    }).rename('temp_change');
+  return eq
+  .copyProperties(img, img.propertyNames())
+  })
+  
+print(ui.Chart.image.series(change, geometry, ee.Reducer.mean(),10000, 'system:time_start').setChartType('ColumnChart'))
+print(change.size())
+Map.addLayer(change.mean(),{min:0,max:2 ,palette:['#00007f', '#0000ff', '#007fff', '#00ffff', '#7fff7f', '#ffff00', '#ff7f00', '#ff0000', '#7f0000']},' percent LST  Growth')
+
+
+
+// Create a time series chart showing LST change   growth
+print(ui.Chart.image.series({
+  imageCollection: change ,
+  region: country,
+  reducer: ee.Reducer.mean(),
+  scale: 10000,
+  xProperty: 'system:time_start' 
+}).setSeriesNames(['change LST    Growth '])
+.setOptions({
+  title: 'change LST  Growth',
+  hAxis: {title: 'Year'},
+  vAxis: {title: '(percent)'},
+  interpolateNulls: true,
+  lineWidth: 1,
+  pointSize: 2,
+  curveType: 'function'
+}));
+
+
+
+// Create a panel to display the legend
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',  // Position the panel in the bottom-right corner
+    padding: '8px 13px'  // Add padding for better appearance
+  }
+});
+
+// Add a title to the legend
+var legendTitle = ui.Label({
+  value: 'LST degree centigrade   Growth',  // Title text
+  style: {
+    fontWeight: 'bold',  // Make the font bold
+    fontSize: '18px',  // Set the font size
+    margin: '0 0 4px 0',  // Margin for spacing
+    padding: '0'  // No padding for the label
+  }
+});
+
+// Add the title to the legend panel
+legend.add(legendTitle);
+
+// Function to create a vertical color bar
+var makeColorBar = function(palette) {
+  var colorBar = ui.Thumbnail({
+    image: ee.Image.pixelLonLat().select(1),  // Use latitude as the image for the gradient
+    params: {
+      bbox: [0, 0, 0.1, 1],  // Create a vertical color bar
+      dimensions: '10x100',  // Set the size of the color bar (10 pixels wide and 100 pixels high)
+      format: 'png',  // Image format
+      min: 0,  // Minimum value for the color bar
+      max: 1,  // Maximum value for the color bar
+      palette: palette,  // Use the provided palette for colors
+    },
+    style: {stretch: 'vertical', margin: '8px 0'}  // Stretch the color bar vertically and add margin
+  });
+  return colorBar;  // Return the created color bar
+};
+
+// Define the magma color palette
+var palette = ['#00007f', '#0000ff', '#007fff', '#00ffff', '#7fff7f', '#ffff00', '#ff7f00', '#ff0000', '#7f0000'] // Colors for the magma palette
+
+// Create labels for the min and max values
+var minLabel = ui.Label({
+  value: '172',  // Label for the maximum value
+  style: {margin: '4px 8px'}  // Add margin for better appearance
+});
+var maxLabel = ui.Label({
+  value: '162',  // Label for the minimum value
+  style: {margin: '4px 8px'}  // Add margin for better appearance
+});
+
+// Add the min label, color bar, and max label to the legend panel in a vertical layout
+legend.add(minLabel);  // Add the min label at the top
+legend.add(makeColorBar(palette));  // Add the color bar in the middle
+legend.add(maxLabel);  // Add the max label at the bottom
+
+// Add the legend panel to the map
+Map.add(legend);
+
+
