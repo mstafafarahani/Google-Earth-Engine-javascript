@@ -1,0 +1,101 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com
+var geometry = 
+    /* color: #0b4a8b */
+    /* shown: false */
+    ee.Geometry.Point([7.9074615922652125, 46.8608768709499]);
+
+/*YOu CAN USE city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry) //boundary city
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+// Define the country boundary using FAO/GAUL dataset and filter by geometry
+/*var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,4)*/
+
+
+Map.centerObject(geometry, 8);
+
+var country     =  ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry)
+var geometry = country.geometry();
+Map.addLayer(geometry, {color: 'green'}, 'Study Area');
+print('Total Area (km2)', geometry.area().divide(1000000))//Calculate  Area in Square Kilometers (Km2)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Define the palette and labels
+var palette = ['green']
+var labels = ['Area of Region(Km2):41255']
+// Create the legend
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',
+    padding: '8px 15px'
+  }
+});
+
+// Title for the legend
+var legendTitle = ui.Label({
+  value: 'Area of Region(Km2): - Switzerland - 2024',
+  style: {
+    fontWeight: 'bold',
+    fontSize: '19px',
+    margin: '0 0 10px 0',
+    padding: '0'
+  }
+});
+legend.add(legendTitle);
+
+// Function to create a legend item
+var makeLegendItem = function(color, name) {
+  var colorBox = ui.Label({
+    style: {
+      backgroundColor: color,
+      padding: '8px',
+      margin: '0 0 4px 0'
+    }
+  });
+
+  var description = ui.Label({
+    value: name,
+    style: {
+      margin: '0 0 4px 6px'
+    }
+  });
+
+  return ui.Panel({
+    widgets: [colorBox, description],
+    layout: ui.Panel.Layout.Flow('horizontal')
+  });
+};
+
+// Add each color and label to the legend
+for (var i = 0; i < palette.length; i++) {
+  legend.add(makeLegendItem(palette[i], labels[i]));
+}
+
+// Add the legend to the map
+Map.add(legend);
