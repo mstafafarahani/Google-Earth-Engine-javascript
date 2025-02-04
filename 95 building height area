@@ -1,0 +1,175 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com  i look for phd position 
+
+var geometry = 
+    /* color: #98ff00 */
+    /* shown: false */
+    ee.Geometry.Point([54.82175298879842, 23.791916798898352]);
+//start date 2018-01-01–   end date 2018-12-31
+
+/*YOu CAN USE city boundary  ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+YOu CAN USE province boundary 
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+
+
+//YOu CAN USE coountry boundary 
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the coountry boundary to the map
+Map.centerObject(geometry,3)
+
+
+
+Map.centerObject(geometry,3)
+
+
+var worldcover = ee.ImageCollection("JRC/GHSL/P2023A/GHS_BUILT_C").first().clip(country)
+print(worldcover)
+// The image has 15 classes
+// Remap the class values to have continuous values
+// from 0 to 14
+var classified = worldcover.remap(
+  [1, 2, 3, 4, 5, 11, 12, 13, 14, 15, 21,22,23,24,25],          //class value
+  [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14]).rename('classification');//number of value from 0 untill last value
+
+// Define a list of class names
+var worldCoverClassNames= ['open spaces, low vegetation surfaces','open spaces, medium vegetation surfaces','open spaces, high vegetation surfaces',
+'open spaces, water surfaces','open spaces, road surfaces','built spaces, residential, building height <= 3m','built spaces, residential, 3m < building height <= 6m','built spaces, residential, 6m < building height <= 15m','built spaces, residential, 15m < building height <= 30m','built spaces, residential, building height > 30m','built spaces, non-residential, building height <= 3m','built spaces, non-residential, 3m < building height <= 6m','built spaces, non-residential, 6m < building height <= 15m','built spaces, non-residential, 15m < building height <= 30m','built spaces, non-residential, building height > 30m']
+
+// Define a list of class colors
+var worldCoverPalette = ['#718c6c','#8ad86b','#c1ffa1','#01b7ff','#ffd501','#d28200','#fe5900','#ff0101','#ce001b','#7a000a','#ff9ff4','#ff67e4','#f701ff','#a601ff','#6e00fe'];
+
+// We define a dictionary with class names
+var classNames = ee.Dictionary.fromLists(['0','1','2','3','4','5','6','7','8','9','10','11','12','13','14'],worldCoverClassNames);
+
+// We define a dictionary with class colors
+var classColors = ee.Dictionary.fromLists(['0','1','2','3','4','5','6','7','8','9','10','11','12','13','14'],worldCoverPalette)
+
+Map.addLayer(classified, {min:0, max:14, palette: worldCoverPalette}, 'building height');
+
+
+// Create an area image and convert to square meter m2
+var areaImage = ee.Image.pixelArea().divide(1);
+
+// Add the band containing classes
+var areaImageWithClass = areaImage.addBands(classified);  //areaImageWithClass = classified + areaImage
+
+// Use a Grouped Reducer to calculate areas
+var areas = areaImageWithClass.reduceRegion({
+      reducer: ee.Reducer.sum().group({
+      groupField: 1,
+      groupName: 'classification',
+    }),
+    geometry: country,
+    scale: 10,
+    maxPixels: 1e10
+    }); 
+ 
+var classAreas = ee.List(areas.get('groups'));
+
+// Process results to extract the areas and
+// create a FeatureCollection
+var classAreaList = classAreas.map(function(item) {
+  var areaDict = ee.Dictionary(item);
+  var classNumber = areaDict.getNumber('classification').format();
+  var classArea = areaDict.getNumber('sum');
+  var className = classNames.get(classNumber);
+  var classColor = classColors.get(classNumber);
+  // Create a feature with geometry and 
+  // required data as a dictionary
+  return ee.Feature(geometry, {
+    'class': classNumber,
+    'class_name': className,
+    'Area': classArea,
+    'color': classColor
+  });
+});
+
+
+var classAreaFc = ee.FeatureCollection(classAreaList);
+//print('Class Area (FeatureCollection)', classAreaFc);
+
+// We can now chart the resulting FeatureCollection
+// If your area is large, it is advisable to first Export
+// the featurecolleciton as an Asset and import it once
+// the export is finished.
+var chart = ui.Chart.feature.byFeature({features: classAreaFc,xProperty: 'class_name',yProperties: ['Area']})
+.setChartType('PieChart').setOptions({title: 'building height area  m2',});
+print(chart);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+var palette = ['#718c6c','#8ad86b','#c1ffa1','#01b7ff','#ffd501','#d28200','#fe5900','#ff0101','#ce001b','#7a000a','#ff9ff4','#ff67e4','#f701ff','#a601ff','#6e00fe']
+var labels =  ['open spaces, low vegetation surfaces','open spaces, medium vegetation surfaces','open spaces, high vegetation surfaces',
+'open spaces, water surfaces','open spaces, road surfaces','built spaces, residential, building height <= 3m','built spaces, residential, 3m < building height <= 6m','built spaces, residential, 6m < building height <= 15m','built spaces, residential, 15m < building height <= 30m','built spaces, residential, building height > 30m','built spaces, non-residential, building height <= 3m','built spaces, non-residential, 3m < building height <= 6m','built spaces, non-residential, 6m < building height <= 15m','built spaces, non-residential, 15m < building height <= 30m','built spaces, non-residential, building height > 30m']
+//--
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',
+    padding: '8px 15px'
+  }
+});
+
+// Title for the legend
+var legendTitle = ui.Label({
+  value: 'building height',
+  style: {
+    fontWeight: 'bold',
+    fontSize: '16px',
+    margin: '0 0 10px 0',
+    padding: '0'
+  }
+});
+legend.add(legendTitle);
+
+// Function to create a legend item
+var makeLegendItem = function(color, name) {
+  var colorBox = ui.Label({
+    style: {
+      backgroundColor: color,
+      padding: '8px',
+      margin: '0 0 4px 0'
+    }
+  });
+
+  var description = ui.Label({
+    value: name,
+    style: {
+      margin: '0 0 4px 6px'
+    }
+  })
+  return ui.Panel({
+    widgets: [colorBox, description],
+    layout: ui.Panel.Layout.Flow('horizontal')
+  })
+}
+// Add each color and label to the legend
+for (var i = 0; i < palette.length; i++) {
+  legend.add(makeLegendItem(palette[i], labels[i]));
+}
+// Add the legend to the map
+Map.add(legend);
