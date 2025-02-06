@@ -1,0 +1,61 @@
+// vedio code in my youtube.com/@geemap   mstafa.farahani@gmail.com
+
+
+// 1. Define your Area of Interest (geometry)
+ // Example geometry in chennai                               
+var geometry = /* color: #d63000 */ee.Geometry.Polygon(
+        [[[90.35, 24],
+          [90.35, 23.7],
+          [90.65, 23.7],
+          [90.65, 24]]]);
+
+// 10. Center the map on the geometry
+Map.centerObject(geometry, 10);
+
+
+// 2. Load a Digital Elevation Model (DEM)                                                                                                    
+var dem = ee.Image('USGS/SRTMGL1_003').clip(geometry);
+Map.addLayer(dem, {min: 0, max: 100, palette: ['blue', 'green', 'yellow', 'red']}, 'DEM');                                 
+
+// 3. Calculate Slope and Elevation
+var slope = ee.Terrain.slope(dem);
+Map.addLayer(slope, {min: 0, max: 10, palette: ['white', 'gray', 'black']}, 'Slope');                                      
+
+// 4. Load Land Cover Data (e.g., MODIS Land Cover)                                                                                    
+var landcover = ee.ImageCollection('MODIS/006/MCD12Q1')
+  .filterDate('2020-01-01', '2020-12-31')
+  .select('LC_Type1')
+  .first() // .first() mean get for one value only for one day
+  .clip(geometry);
+Map.addLayer(landcover, {min: 1, max: 17, palette: [                                                                                            
+  '05450a', '086a10', '54a708', '78d203', '009900', 'c6b044', 'dcd159',
+  'dade48', 'fbff13', 'b6ff05', '27ff87', 'c24f44', 'a5a5a5', 'ff6d4c', 
+  '69fff8', 'f9ffa4', '1c0dff']}, 'Land Cover');
+
+// 5. Load Precipitation Data (e.g., CHIRPS)                                                                                                       
+var precipitation = ee.ImageCollection('UCSB-CHG/CHIRPS/DAILY')
+  .filterDate('2020-01-01', '2020-12-31')
+  .sum() // to get sumation for this start date  until end date
+  .clip(geometry);
+Map.addLayer(precipitation, {min: 0, max: 2000, palette: ['white', 'blue', 'purple']}, 'Precipitation');                         
+
+// 6. Normalize the Layers for Flood Risk Calculation
+var slopeRisk = slope.divide(ee.Number(30)).clamp(0, 1); // Assuming slope > 30 degrees is low risk                          
+var elevationRisk = dem.divide(ee.Number(100)).clamp(0, 1); // Assuming elevation > 100m is low risk       
+var precipitationRisk = precipitation.divide(ee.Number(2000)).clamp(0, 1); // Assuming > 2000mm of rain is high risk   
+
+// 7. Adjust Risk Based on Land Cover
+var water = landcover.eq(0);  // Identify water bodies  
+var urban = landcover.eq(13);  // Identify urban areas
+
+var landcoverRisk = water.multiply(0.1)  // Water bodies have low risk
+  .add(urban.multiply(1));  // Urban areas have high risk
+
+// 8. Calculate the Flood Risk Index (a simple weighted sum)               
+var floodRisk = slopeRisk.multiply(0.3)  // 30% weight for slope
+  .add(elevationRisk.multiply(0.3))  // 30% weight for elevation
+  .add(precipitationRisk.multiply(0.4))  // 40% weight for precipitation
+  .multiply(landcoverRisk.add(1));  // Adjust risk based on land cover
+
+// 9. Display the Flood Risk Map
+Map.addLayer(floodRisk, {min: 0, max: 2, palette: ['green', 'yellow', 'red']}, 'Flood Risk');         
