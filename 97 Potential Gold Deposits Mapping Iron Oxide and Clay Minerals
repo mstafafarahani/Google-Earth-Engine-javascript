@@ -1,0 +1,183 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com  Happy coding! 🚀
+
+/*YOu CAN USE city boundary and run this code only for your  city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+
+
+YOu CAN USE province boundary and run this code only for your  province
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+
+
+//YOu CAN USE country boundary and run this code only for your  country
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,3)
+
+
+
+// Define your region of interest (geometry)
+var geometry = 
+    /* color: #0b4a8b */
+    /* shown: false */
+    ee.Geometry.MultiPoint(
+        [[1.1063733850020085, 7.835203919873662],
+         [1.0201551340685988, 7.589331784716221]]);
+
+// Load Sentinel-2 Surface Reflectance data
+var sentinel2 = ee.ImageCollection('COPERNICUS/S2_SR')
+    .filterBounds(country)
+    .filterDate('2020-01-01', '2020-12-31')
+    .median()
+    .clip(country);
+
+// Calculate the Iron Oxide Index (Red / Blue)
+var ironOxide = sentinel2.normalizedDifference(['B4', 'B2']).rename('IronOxide');
+
+// Calculate the Clay Minerals Index (SWIR / NIR)
+var clayMinerals = sentinel2.normalizedDifference(['B11', 'B8']).rename('ClayMinerals');
+
+
+// Add layers to the map
+Map.addLayer(ironOxide, {min: -0.5,max: 0.5,palette: ['blue', 'white', 'red']}, 'Iron Oxide (Potential Gold Indicator)');
+Map.addLayer(clayMinerals, {min: -0.5,max: 0.5,palette: ['blue', 'white', 'green']}, 'Clay Minerals (Potential Gold Indicator)');
+
+
+
+print(ui.Chart.image.histogram(ironOxide, country, 100));
+print(ui.Chart.image.histogram(clayMinerals, country, 100));
+// 11. Calculate and print the mean ironOxide the ROI
+var meanCanopyHeight = ironOxide.reduceRegion({
+  reducer: ee.Reducer.mean(),
+  geometry: geometry,
+  scale: 100
+}).values().get(0);
+print('Mean ironOxide:', meanCanopyHeight);
+
+// 12. Calculate and print the maximum ironOxide the ROI
+var maxCanopyHeight = ironOxide.reduceRegion({
+  reducer: ee.Reducer.max(),
+  geometry: geometry,
+  scale: 100
+}).values().get(0);
+print('Max ironOxide:', maxCanopyHeight);
+
+// 13. Calculate and print the minimum ironOxide within the ROI
+var minCanopyHeight = ironOxide.reduceRegion({
+  reducer: ee.Reducer.min(),
+  geometry: geometry,
+  scale: 100
+}).values().get(0);
+print('Min ironOxide:', minCanopyHeight);
+ 
+// 14. Calculate and print the 99th percentile ironOxide within the ROI
+var canopyHeight99thPercentile = ironOxide.reduceRegion({
+  reducer: ee.Reducer.percentile([99]),
+  geometry: geometry,
+  scale: 100
+}).values().get(0);
+print('Percentile ironOxide:', canopyHeight99thPercentile);
+
+
+//----------------------------
+ //11. Calculate and print the mean clayMinerals within the ROI
+var meanCanopyHeight = clayMinerals.reduceRegion({
+  reducer: ee.Reducer.mean(),
+  geometry: geometry,
+  scale: 100
+}).values().get(0);
+print('Mean clayMinerals:', meanCanopyHeight);
+
+// 12. Calculate and print the maximum clayMinerals within the ROI
+var maxCanopyHeight = clayMinerals.reduceRegion({
+  reducer: ee.Reducer.max(),
+  geometry: geometry,
+  scale: 100
+}).values().get(0);
+print('Max clayMinerals:', maxCanopyHeight);
+
+// 13. Calculate and print the minimum clayMinerals within the ROI
+var minCanopyHeight = clayMinerals.reduceRegion({
+  reducer: ee.Reducer.min(),
+  geometry: geometry,
+  scale: 100
+}).values().get(0);
+print('Min clayMinerals:', minCanopyHeight);
+ 
+// 14. Calculate and print the 99th percentile clayMinerals within the ROI
+var canopyHeight99thPercentile = clayMinerals.reduceRegion({
+  reducer: ee.Reducer.percentile([99]),
+  geometry: geometry,
+  scale: 100
+}).values().get(0);
+print('Percentile clayMinerals:', canopyHeight99thPercentile);
+
+/*How to Identify Potential Gold Mineral  Areas Using Remote Sensing in Google Earth Engine?
+
+Gold mineral mapping in Google Earth Engine (GEE) can be done by analyzing specific spectral signatures of minerals associated with gold deposits using satellite imagery. 
+This typically involves using hyperspectral or multispectral data like Landsat or Sentinel-2, combined with indices or band ratios sensitive to mineralogical variations.
+
+
+A common approach is using spectral indices such as the Normalized Difference Vegetation Index (NDVI), Iron Oxide Ratio, or Clay Mineral Ratio to detect areas that 
+may indicate mineralization.
+
+Here’s an example using Sentinel-2 imagery to highlight potential gold-bearing areas based on iron oxide and clay minerals:
+
+Example:
+Mapping Minerals (Iron Oxide and Clay) with Sentinel-2
+
+
+Steps :
+
+1. Copy code in my Channel Description
+
+2.Explanation:
+Region of Interest (geometry): 
+
+A user-defined polygon defines the area where you want to conduct gold mineral mapping.
+
+
+
+3.Sentinel-2 Imagery: 
+
+This example uses Sentinel-2 Surface Reflectance imagery. Sentinel-2 offers higher resolution (10m) than Landsat and is ideal for mineral mapping because
+it has bands in the shortwave infrared (SWIR) region that are sensitive to clay minerals and iron oxides.
+
+
+
+3.Iron Oxide Index: 
+
+Iron oxides are often associated with mineral deposits, and the normalized difference between the red band (B4) and blue band (B2) is commonly used to 
+detect them.
+
+
+4.Clay Minerals Index: 
+
+Clay minerals can be associated with alteration zones in hydrothermal systems, and the normalized difference between the
+SWIR band (B11) and near-infrared band (B8) highlights areas rich in clay minerals.
+
+
+
+5.Visualization: 
+
+Both indices are visualized using color gradients:
+
+
+Iron Oxide: Red indicates higher concentrations, often a sign of mineralization.
+ could be gold bearing)
+
+
+Clay Minerals: Green indicates areas with more clay,which could be related to hydrothermal alteration. 
+
+This approach provides a useful preliminary exploration tool for identifying areas potentially associated with gold mineralization 
+using satellite data.However, further ground surveys and detailed geological data 
+would be required for actual gold exploration.
+
+
+code............................................................................................................................................................................................-------------------------------------------------
+*/
