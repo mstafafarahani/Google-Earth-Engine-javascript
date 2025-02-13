@@ -1,0 +1,84 @@
+
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com   happy coding 
+var geometry = 
+    /* color: #98ff00 */
+    /* shown: false */
+    ee.Geometry.Point([-7.852031377899619, 40.02595034030794]);
+/*YOu CAN USE city boundary and run this code for your only city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+YOu CAN USE province boundary and run this code only for your  province
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+//YOu CAN USE country boundary and run this code only for your  country
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,3)  // the zoom level would be changed by this function
+
+var s2 = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED"); // 2017 to 2025
+var roi = country;
+
+// Year
+var year = 2024;// 2017 to 2025
+
+// List of months parameter
+// Name is the name of the month 
+// End is the last day of the month
+var months = [
+  { name: 'January', end: 31 },
+  { name: 'February', end: 28 },
+  { name: 'March', end: 31 },
+  { name: 'April', end: 30 },
+  { name: 'May', end: 31 },
+  { name: 'June', end: 30 },
+  { name: 'July', end: 31 },
+  { name: 'August', end: 31 },
+  { name: 'September', end: 30 },
+  { name: 'October', end: 31 }, 
+  { name: 'November', end: 30 },
+  { name: 'December', end: 31 }
+];
+
+// Cloud masking function
+function cloudMask(image){
+  var scl = image.select('SCL'); // SCL band
+  var mask = scl.eq(3).or(scl.gte(8).and(scl.lte(10))).eq(0); // Cloud and shadow mask
+  return image.select(['B.*']) // Select only spectral bands
+    .updateMask(mask); // Apply cloud mask
+}
+
+// Composite and export per months
+months.map(function(month, index){ // i create a loop by function .map
+  // Name of the image
+  var name = year + '_' + month.name;
+  
+  // Create start and end date from the composite
+  var start = ee.Date.fromYMD(year, index + 1, 1);
+  var end = ee.Date.fromYMD(year, index + 1, month.end);
+  
+  // Create a image composite
+  var image = s2.filterBounds(country) // i choose the country portugal by function filterBounds .Filter by area
+    .filterDate(start, end) // Filter by date
+    .map(cloudMask) // Apply cloud and shadow mask
+    .median() // Apply median reducer
+    .clip(country) // i choose the country portugal by function clip to Cut to roi
+    .toUint16(); // Convert to Uint16 0 - 10000 values to make it smaller when saved
+    
+  // Show image per month
+  Map.addLayer(image, { min: 3, max: 5149, bands: ['B4', 'B3', 'B2'] }, name, false);
+  
+  // Export image to drive
+  Export.image.toDrive({
+    image: image,
+    scale: 30,
+    maxPixels: 1e13,
+    region: country,
+    crs: 'EPSG:4326',
+    description: name,
+    folder: 'Monthly_composite'
+  });
+});
