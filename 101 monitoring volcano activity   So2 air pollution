@@ -1,0 +1,163 @@
+/*                 vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com          */
+var volcano1 = /* color: #d63000 */ee.Geometry.Polygon(
+        [[[160.438626107022, 55.870035215831315],
+          [160.317776497647, 55.88082092929158],
+          [160.22713929061575, 55.81914791512433],
+          [160.29305725936575, 55.763558493855534],
+          [160.4001739585845, 55.751194513174944],
+          [160.44686585311575, 55.800626922720646],
+          [160.49081116561575, 55.84999665541123]]]),
+    volcano2 = /* color: #98ff00 */ee.Geometry.Polygon(
+        [[[160.68307190780325, 56.00694487925473],
+          [160.72152405624075, 56.0836482756305],
+          [160.61715393905325, 56.10509790695323],
+          [160.56771546249075, 56.063720061469894],
+          [160.5869415367095, 56.028437203121754],
+          [160.62814026717825, 56.013086763692975]]]),
+    volcano3 = /* color: #0b4a8b */ee.Geometry.Polygon(
+        [[[160.570462044522, 56.092842437727285],
+          [160.614407357022, 56.14643132218864],
+          [160.51278382186575, 56.17090424285978],
+          [160.34249573592825, 56.09437458471777],
+          [160.25460511092825, 56.00080201830846],
+          [160.306790169522, 55.95623706495554],
+          [160.3672149742095, 55.93624300042921],
+          [160.4770782554595, 56.00694487925473],
+          [160.54574280624075, 56.06678661130853]]]),
+    volcano4 = /* color: #ffc82d */ee.Geometry.Polygon(
+        [[[160.65148621444388, 55.82531962099707],
+          [160.713284310147, 55.836117750626634],
+          [160.68169861678763, 55.87850995719566],
+          [160.592434700772, 55.91008133702325],
+          [160.55260926131888, 55.89391383952401],
+          [160.537503060147, 55.84228676447442],
+          [160.62951355819388, 55.823776786312614]]]),
+    volcano5 = /* color: #00ffff */ee.Geometry.Polygon(
+        [[[160.603421028897, 55.732254570664175],
+          [160.61028748397513, 55.76703515722881],
+          [160.54024964217825, 55.79020499132728],
+          [160.49493103866263, 55.78248324392914],
+          [160.45785218124075, 55.7508080756185],
+          [160.50317078475638, 55.72220107203315],
+          [160.56359558944388, 55.718333652477504]]]);
+
+
+var locations = ee.FeatureCollection([
+  ee.Feature(volcano1, {'name': 'volcano1+Sulfur dioxide SO2 '}),
+  ee.Feature(volcano2, {'name': 'volcano2'}),
+  ee.Feature(volcano3, {'name': 'volcano3'}),
+  ee.Feature(volcano4, {'name': 'volcano2'}),
+  ee.Feature(volcano5, {'name': 'volcano2'})
+]);
+
+Map.centerObject(volcano3,7)  // the zoom level would be changed by this function
+
+
+var time_start = ee.Date('2023')
+var time_end = ee.Date('2024')
+var time_diff = time_end.difference(time_start, 'day')
+
+print(time_diff)
+
+var sen5 = ee.ImageCollection("COPERNICUS/S5P/NRTI/L3_SO2")
+.select('SO2_column_number_density')
+.filterDate(time_start, time_end)
+
+var list = ee.List.sequence(0, time_diff.subtract(1), 1).map(function(day){
+  return time_start.advance(day, 'days')
+  })
+
+var daily = ee.ImageCollection(list.map(function(date){// i make loop by function .map
+  var start_date = ee.Date(date)
+  var end_date = start_date.advance(1, 'days')
+  var img = sen5.filterDate(start_date, end_date).max()
+  return img
+  .set('system:time_start', start_date.millis())
+  .set('system:time_end', end_date.millis())
+  }));
+
+
+
+
+print(ui.Chart.image.series(daily, locations, ee.Reducer.first(), 1000, 'system:time_start').setChartType('ColumnChart'))
+Map.addLayer(daily.filterDate('2023-04-11', '2023-04-12').first().clip(locations),[],'eruption', false )
+// Print the size of the filtered image collection (number of images)
+print(daily.size());
+
+
+// Add a layer to the map showing the average SO2 concentration using a color gradient.
+Map.addLayer(daily.filterDate('2023-04-11', '2023-04-12').first().clip(locations),{palette: ['blue', 'cyan', 'green', 'yellow', 'red']},'eruption', false)
+
+
+
+
+var chart = ui.Chart.image.seriesByRegion({
+  imageCollection: daily,
+  regions: locations,
+  reducer: ee.Reducer.mean(), // Calculate the mean SO2 value for each region
+  scale: 1000, // Resolution for analysis
+  seriesProperty: 'name' // Use region names as series identifiers
+})
+.setOptions({
+  interpolateNulls: true, // Smooth gaps in data
+  lineWidth: 1,
+  pointSize: 2,
+  curveType: 'function', // Use smooth curves
+  title: 'Sulfur dioxide SO2 Trends',
+  vAxis: {title: 'SO2 '},
+  hAxis: {title: 'Date', format: 'YYYY-MM-dd'},
+  series: { // Define colors for each ROI
+    0: {color: 'orange'},
+    1: {color: 'yellow'},
+    2: {color: 'green'},
+    3: {color: 'blue'},
+    4: {color: 'black'}
+    
+  },
+  legend: {position: 'top'} // Position the legend at the top
+});
+print(chart);
+
+
+Export.image.toDrive({
+  image: daily.filterDate('2023-04-11', '2023-04-12').first(),
+  description: 'eruption_test', 
+  scale: 1000, 
+  region: locations, 
+  crs: 'EPSG:4326', 
+  folder: 'test'
+  })
+
+
+// anomaly detection 
+
+
+var daily_mean = daily.median()
+
+var anomaly = daily.map(function(img){ // i make a loop by function
+  var anom = img.subtract(daily_mean)
+  var stat = ee.Number(anom.reduceRegion({
+    reducer: ee.Reducer.first(), geometry: locations, scale: 1000
+    }).values().get(0))
+  var date = img.date().format('YYYY-MM-dd')
+  
+  return anom
+  .copyProperties(img, img.propertyNames())
+  .set('anom_stat', stat)
+  .set('date', ee.String(date))
+  })
+  
+print(anomaly.aggregate_array('anom_stat'))
+
+
+var activity = anomaly.filter(ee.Filter.gt('anom_stat', 0))
+
+print(activity.aggregate_array('date'))
+
+var stack = activity.map(function(img){
+  var date = img.get('date')
+  return img.rename(ee.String(date))  
+  }).toBands()
+
+Map.addLayer(stack.clip(locations),[],'stack_activity',false)
+//Map.addLayer(stack.clip(locations),{palette: ['blue', 'cyan', 'green', 'yellow', 'red']},'stack_activity',false)
