@@ -1,0 +1,80 @@
+
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com
+var geometry = 
+    /* color: #98ff00 */
+    /* shown: false */
+    ee.Geometry.MultiPoint(
+        [[51.13909204972669, 25.736155915602474],
+         [51.25877812446777, 25.30340502623793]]);
+/*YOu CAN USE city boundary and run this code for your only city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+YOu CAN USE province boundary and run this code only for your  province
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+//YOu CAN USE country boundary and run this code only for your  country
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,3)
+
+
+Map.centerObject(geometry,9)  //the zoom level would be changed by this function 
+
+var time_start = ee.Date('2000')
+var time_end = ee.Date('2025')
+var unit = 'year'
+var time_dif = time_end.difference(time_start, unit).round()
+
+
+
+var aod = ee.ImageCollection("MODIS/061/MCD19A2_GRANULES")
+.select('Optical_Depth_055')
+.filterDate(time_start, time_end)  //start date and end date would be changed by this function
+.filterBounds(country)  // to choose your country
+.filter(ee.Filter.eq('SATELLITE','T')) // satellite terra from satellite modis
+
+
+var list = ee.List.sequence(0, time_dif.subtract(1), 1).map(function(delta){
+  return time_start.advance(delta, unit)
+  })
+  
+print(list)
+
+var aod_collection = ee.ImageCollection(list.map(function(date){ // i make loop by function .map
+  var start_date = ee.Date(date)
+  var end_date = start_date.advance(1, unit)
+  var img_agg = aod.filterDate(start_date, end_date).map(function(img){
+      var bands = img.multiply(0.001)  // to convert real scale
+      var thr = bands.gt(0.5)   //adjust your export value more than 0.5
+  return thr}).sum().clip(country) // to get sumation value and choose your country
+  
+  // var img_agg = aod.filterDate(start_date, end_date).map(function(img){
+  // return img.multiply(0.001)
+  // .copyProperties(img, img.propertyNames())
+  //   }).mean()
+  return img_agg
+  .set('system:time_start', start_date.millis())
+  .set('system:time_end', end_date.millis())
+  .set('system:index', start_date.format('YYYY-MM-dd'))
+  }))
+  
+print(aod_collection)
+
+print(ui.Chart.image.series(aod_collection, country, ee.Reducer.mean(), 1000, 'system:time_start'))
+
+
+var occ = aod_collection.map(function(img){
+  var thr = img.gt(0)
+  return thr  
+  }).sum()
+  
+Map.addLayer(occ.clip(country),{min:20.1,max:24.9 ,palette:['000004', '320A5A', '781B6C', 'BB3654', 'EC6824', 'FBB41A', 'FCFFA4']},'@geemap')
+Map.addLayer(occ.clip(country), {min:20.1, max: 24.9}, '@geemap')
+
+Export.image.toDrive({image: occ.clip(country), description: 'aod_occ', scale: 1000, region: country, crs: 'EPSG:4326', folder: 'test'})
+
+
