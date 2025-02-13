@@ -1,0 +1,97 @@
+
+Map.centerObject(geometry,7) // the zoom level can be changed by this function 
+
+var geometry = 
+    /* color: #d63000 */
+    /* shown: false */
+    ee.Geometry.Polygon(
+        [[[-73.9503542266965, 40.79001462376119],
+          [-73.94468940125705, 40.79755224475653],
+          [-73.96065390931369, 40.80378962875407],
+          [-73.9745584808469, 40.7842958576888],
+          [-73.97799170838596, 40.78013644577074],
+          [-73.97438681946994, 40.77896656423749],
+          [-73.98211158143283, 40.76882672789467],
+          [-73.97370017396213, 40.76349619341811],
+          [-73.96340049134494, 40.77714670756603],
+          [-73.96065390931369, 40.78169625576456],
+          [-73.95378745423557, 40.79118431069733]]]);
+
+
+var sen2  = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+.filterBounds(geometry)    //you choose your area of interest by this function
+.filterDate('2000','2024')  // start date and end date would be used by  this funtion
+.filter(ee.Filter.calendarRange(6,8,'month'))  // the monthly date is applied by this function
+.filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE',10)) // to reduce impact of cloud  , we use this function
+.map(function(img){   // i make a loop
+  var bands = img.select('B.*').multiply(0.0001);  // to convert to the real scale
+  var ndvi = bands.normalizedDifference(['B8','B4']).rename('ndvi')   // i make a band called ndvi
+  return ndvi
+  .copyProperties(img, ['system:time_start', 'system:time_end'])
+  })
+
+var ndvi_mean = sen2.median();  // i get median value ny this function
+Map.addLayer(ndvi_mean.clip(geometry),{min:0.1027195652173913,max:0.780571739130435,palette:['ffffff', 'ce7e45', 'df923d', 'f1b555', 'fcd163', '99b718', '74a901','66a000', '529400', '3e8601', '207401', '056201', '004c00', '023b01','012e01', '011d01', '011301']},'ndvi_mean',false)
+
+print(ui.Chart.image.histogram(ndvi_mean, geometry, 10))  // by funtction ui.chart.image.histogram i create this chart
+
+var ndvi_thr = ndvi_mean.gt(0.25);  // i choose the value more than  0.25 frequence
+Map.addLayer(ndvi_thr.clip(geometry),{min:0.1027195652173913,max:0.780571739130435,palette:['ffffff', 'ce7e45', 'df923d', 'f1b555', 'fcd163', '99b718', '74a901','66a000', '529400', '3e8601', '207401', '056201', '004c00', '023b01','012e01', '011d01', '011301']},'ndvi_thr', false)
+
+var ndvi_mask = ndvi_thr.updateMask(ndvi_thr); // i create ndvi like stain and spot by this function
+Map.addLayer(ndvi_mask.clip(geometry),{min:0.1027195652173913,max:0.780571739130435,palette:['ffffff', 'ce7e45', 'df923d', 'f1b555', 'fcd163', '99b718', '74a901','66a000', '529400', '3e8601', '207401', '056201', '004c00', '023b01','012e01', '011d01', '011301']},'ndvi_mask', false)
+
+var ndvi_area = ndvi_mask.multiply(ee.Image.pixelArea()).divide(1e6)  // the area km2  ndvi get calculated by this function and convertedto km2 by function .divide(1e6)
+Map.addLayer(ndvi_area.clip(geometry),{min:0.1027195652173913,max:0.780571739130435,palette:['ffffff', 'ce7e45', 'df923d', 'f1b555', 'fcd163', '99b718', '74a901','66a000', '529400', '3e8601', '207401', '056201', '004c00', '023b01','012e01', '011d01', '011301']},'ndvi_area', false)
+
+var area_val  = ndvi_area.reduceRegion({
+  reducer: ee.Reducer.sum(), // km2
+  geometry: geometry, 
+  scale: 10
+  }).values().get(0)
+print(area_val)
+
+// 11. Calculate and print the mean ndvi the ndvi
+var meanCanopyHeight = ndvi_area.reduceRegion({
+  reducer: ee.Reducer.mean(),
+  geometry: geometry,
+  scale: 100
+}).values().get(0);
+print('Mean ndvi_area:', meanCanopyHeight);
+
+// 12. Calculate and print the maximum ndvi the ROI
+var maxCanopyHeight = ndvi_area.reduceRegion({
+  reducer: ee.Reducer.max(),
+  geometry: geometry,
+  scale: 100
+}).values().get(0);
+print('Max ndvi_area:', maxCanopyHeight);
+
+// 13. Calculate and print the minimum ndvi within the ROI
+var minCanopyHeight = ndvi_area.reduceRegion({
+  reducer: ee.Reducer.min(),
+  geometry: geometry,
+  scale: 100
+}).values().get(0);
+print('Min ndvi_area:', minCanopyHeight);
+ 
+// 14. Calculate and print the 99th percentile ndvi within the ROI
+var canopyHeight99thPercentile = ndvi_area.reduceRegion({
+  reducer: ee.Reducer.percentile([99]),
+  geometry: geometry,
+  scale: 100
+}).values().get(0);
+print('Percentile ndvi_area:', canopyHeight99thPercentile);
+
+
+
+
+var tree_area = sen2.map(function(img){ //i create the loop by function .map
+  var ndvi_thr = img.gt(0.25);
+  var ndvi_mask = ndvi_thr.updateMask(ndvi_thr);
+  var ndvi_area = ndvi_mask.multiply(ee.Image.pixelArea()).divide(1e6)  // the area km2  ndvi get calculated by this function and convertedto km2 by function .divide(1e6)
+  return ndvi_area
+  .copyProperties(img, img.propertyNames())
+  })
+  
+print(ui.Chart.image.series(tree_area, geometry, ee.Reducer.sum(), 10, 'system:time_start').setChartType('ColumnChart'))
