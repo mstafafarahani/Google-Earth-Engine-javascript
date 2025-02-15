@@ -1,0 +1,64 @@
+//youtube.com/@geemap
+
+
+// Exporting Timelapse for any case study like lake area like  Glacier Change (2014-2020) and any case study  as Video using Google Earth Engine (GEE)
+
+// 1. Load a Landsat 8 image collection
+var Landsat_Collection = ee.ImageCollection("LANDSAT/LC08/C02/T1_TOA")
+// 2. Himalayan glaciers
+.filter(ee.Filter.eq('WRS_PATH', 148))
+.filter(ee.Filter.eq('WRS_ROW', 35))
+// 3. Filter cloudy scenes.
+.filter(ee.Filter.lt('CLOUD_COVER', 20)) //to remove shoadow and cloud for better visualization
+// 4. Get 6 years of imagery.
+.filterDate('2013-01-01','2025-02-13') // to choose range date for start date and end date
+// 5. Need to have 3-band imagnery for the video.
+.select(['B4','B3','B2'])
+// 6. Need to make the data 8-bit.
+.map(function(image){ // i create a loop by funcrtion .map
+  return image.multiply(512).uint8();
+});
+
+
+
+// 7.glacier monitoring
+var geometry = 
+    /* color: #d63000 */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[75.48668720920894, 36.172721800966556],
+          [75.48668720920894, 35.90398731685042],
+          [76.00029804905269, 35.90398731685042],
+          [76.00029804905269, 36.172721800966556]]], null, false);
+
+//lake monitoring
+var geometry1 = 
+    /* color: #98ff00 */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[44.87707544929972, 38.31155511830501],
+          [44.87707544929972, 36.98068043203139],
+          [46.23388697273722, 36.98068043203139],
+          [46.23388697273722, 38.31155511830501]]], null, false);
+
+
+Map.addLayer(geometry,{},"Region"); // add this layer to the map
+Map.centerObject(geometry, 10); //chane the zoom level by function Map.centerObject
+
+// 8. Export (change dimension or scale for higher quality). data to the video mp4 Export.video.toDrive({
+Export.video.toDrive({
+  collection: Landsat_Collection,
+  description: 'GlacierVideoToDrive',
+  dimensions: 720,
+  framesPerSecond: 12,
+  region: geometry
+});
+//---------------------------------------------------------------------
