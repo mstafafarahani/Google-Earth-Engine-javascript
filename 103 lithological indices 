@@ -1,0 +1,166 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com
+// Define a polygon geometry representing the study area
+// The coordinates define a rectangular region of interest (ROI) for analysis
+// This area is used to clip and analyze remote sensing images
+
+var geometry = 
+    /* color: #d63000 */
+    /* shown: false */
+    ee.Geometry.Point([34.90865561336923, 31.128654433121007]);
+
+/*YOu CAN USE city boundary and run this code only for your  city ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+YOu CAN USE province boundary and run this code only for your  province
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+//YOu CAN USE country boundary and run this code only for your  country
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+
+
+
+
+
+// Center the map view to focus on the study area
+// This ensures that when running the script, the map zooms into the selected region
+Map.centerObject(geometry);
+
+// Load ASTER satellite image collection
+// ASTER (Advanced Spaceborne Thermal Emission and Reflection Radiometer) captures multi-spectral images
+var aster = ee.ImageCollection("ASTER/AST_L1T_003")
+    .filterBounds(country) // Select images that overlap the study area
+    .filter(ee.Filter.lt('CLOUDCOVER', 10)) // Exclude images with more than 10% cloud cover
+    .filter(ee.Filter.calendarRange(6, 9, 'month')) // Select images from June to September (dry season preferred for mineral studies)
+    .mean(); // Compute the mean composite image for the selected period
+
+// Print the final ASTER image details to the console for inspection
+print("ASTER Composite Image:", aster);
+
+// Add the ASTER image to the map, clipped to the study area
+Map.addLayer(aster.clip(country), [], 'ASTER Composite', false);
+
+// Function to apply Dark Object Subtraction (DOS) for atmospheric correction
+// This method reduces atmospheric scattering effects by subtracting the minimum reflectance value in each band
+function dos(img) {
+    // Select multispectral (visible and near-infrared) bands
+    var ms = img.select('B0[1-9]', 'B3N'); // Visible and near-infrared bands
+    var tir = img.select('B1[0-4]'); // Thermal infrared bands
+    
+    // Identify the minimum pixel value (dark object) for each band
+    var dark_object = ms.reduceRegion({
+        reducer: ee.Reducer.min(), 
+        geometry: country, 
+        scale: 500
+    });
+    
+    var bands = ms.bandNames();
+    
+    // Perform atmospheric correction by subtracting the dark object value from each band
+    var cor = bands.map(function(band_name) {  //create the loop by function . map
+        var do_val = ee.Number(dark_object.get(band_name));
+        var cor = ms.select([band_name]).subtract(do_val);
+        return cor;
+    });
+    
+    // Return the corrected image with both visible and thermal bands
+    return ee.ImageCollection(cor).toBands().addBands(tir);
+}
+
+// Apply DOS correction to the ASTER composite image
+var aster_cor = dos(aster);
+print("Corrected ASTER Band Names:", aster_cor.bandNames());
+
+// Function to compute lithological indices based on spectral band ratios
+// These indices help in detecting specific minerals using ASTER bands
+function lithology(img, index) {
+    // Kaolinite Index - detects clay-rich minerals, commonly found in weathered rocks
+    var kli = img.expression('(b4/b5)*(b8/b6)',
+        {'b4': img.select('2_B04'), 'b5': img.select('3_B05'), 'b6': img.select('4_B06'), 'b8': img.select('6_B08')})
+        .rename('Kaolinite Index');
+
+    // Alunite Index - identifies sulfate minerals associated with hydrothermal alteration
+    var ali = img.expression('(b7/b5)*(b7/b8)',
+        {'b5': img.select('3_B05'), 'b7': img.select('5_B07'), 'b8': img.select('6_B08')})
+        .rename('Alunite Index');
+
+    // Calcite Index - highlights carbonate materials, often linked to limestone and marble
+    var cli = img.expression('(b6/b8)*(b9/b8)',
+        {'b6': img.select('4_B06'), 'b8': img.select('6_B08'), 'b9': img.select('7_B09')})
+        .rename('Calcite Index');
+
+    // Quartz Index - detects quartz-rich areas, which are useful for identifying silicate rocks
+    var qi = img.expression('(b11 * b11)/(b10 * b12)',
+        {'b10': img.select('B10'), 'b11': img.select('B11'), 'b12': img.select('B12')})
+        .rename('Quartz Index');
+
+    // Carbonate Index - identifies carbonate deposits commonly found in sedimentary formations
+    var ci = img.expression('b13/b14',
+        {'b13': img.select('B13'), 'b14': img.select('B14')})
+        .rename('Carbonate Index');
+
+    // Mafic Index - used for detecting mafic minerals such as pyroxenes and olivine
+    var mi = img.expression('b12/b13',
+        {'b12': img.select('B12'), 'b13': img.select('B13')})
+        .rename('Mafic Index');
+
+    // Return the selected lithological indices image based on user input
+    return ee.Image(ee.Algorithms.If(index === 'kaolinite', kli, 
+        ee.Algorithms.If(index === 'alunite', ali, 
+        ee.Algorithms.If(index === 'calcite', cli, 
+        ee.Algorithms.If(index === 'quartz', qi, 
+        ee.Algorithms.If(index === 'carbonate', ci, 
+        ee.Algorithms.If(index === 'mafic', mi)))))));
+}
+
+// Compute different lithological indices for the corrected ASTER image
+var kaolinite = lithology(aster_cor, 'kaolinite');
+var alunite = lithology(aster_cor, 'alunite');
+var calcite = lithology(aster_cor, 'calcite');
+var quartz = lithology(aster_cor, 'quartz');
+var carbonate = lithology(aster_cor, 'carbonate');
+var mafic = lithology(aster_cor, 'mafic');
+
+
+
+// Add lithological indices as separate layers to the map for visualization
+Map.addLayer(kaolinite.clip(country), [], 'Kaolinite Index', false);
+Map.addLayer(alunite.clip(country), [], 'Alunite Index', false);
+Map.addLayer(calcite.clip(country), [], 'Calcite Index', false);
+Map.addLayer(quartz.clip(country), [], 'Quartz Index', false);
+Map.addLayer(carbonate.clip(country), [], 'Carbonate Index', false);
+Map.addLayer(mafic.clip(country), [], 'Mafic Index', false);
+
+
+
+
+// Add colorful palette  lithological indices as separate layers to the map for visualization
+Map.addLayer(kaolinite.clip(country), {min:0.21485960522657768,max:1.3026793076672671 ,palette:['000004', '320A5A', '781B6C', 'BB3654', 'EC6824', 'FBB41A', 'FCFFA4']}, 'Kaolinite Index', false);
+Map.addLayer(alunite.clip(country),  {min:0.21485960522657768,max:1.3026793076672671 ,palette:['000004', '320A5A', '781B6C', 'BB3654', 'EC6824', 'FBB41A', 'FCFFA4']}, 'Alunite Index', false);
+Map.addLayer(calcite.clip(country),  {min:0.21485960522657768,max:1.3026793076672671 ,palette:['000004', '320A5A', '781B6C', 'BB3654', 'EC6824', 'FBB41A', 'FCFFA4']}, 'Calcite Index', false);
+Map.addLayer(quartz.clip(country),  {min:0.21485960522657768,max:1.3026793076672671 ,palette:['000004', '320A5A', '781B6C', 'BB3654', 'EC6824', 'FBB41A', 'FCFFA4']}, 'Quartz Index', false);
+Map.addLayer(carbonate.clip(country),  {min:0.9511326622175226,max:0.9794809449629119,palette:['000004', '320A5A', '781B6C', 'BB3654', 'EC6824', 'FBB41A', 'FCFFA4']}, 'Carbonate Index', false);
+Map.addLayer(mafic.clip(country),  {min:0.7443859926752878,max:0.8792644061600782 ,palette:['000004', '320A5A', '781B6C', 'BB3654', 'EC6824', 'FBB41A', 'FCFFA4']}, 'Mafic Index', false);
+
+
+
+
+
+// Combine Kaolinite, Calcite, and Quartz indices into a single multi-band image for comparison
+Map.addLayer(kaolinite.addBands(calcite).addBands(quartz).clip(country), [], 'Kaolinite + Calcite + Quartz', false);
+
+// color ful palette Combine Kaolinite, Calcite, and Quartz indices into a single multi-band image for comparison
+//Map.addLayer(kaolinite.addBands(calcite).addBands(quartz).clip(country), {min:0.7443859926752878,max:0.8792644061600782 ,palette:['000004', '320A5A', '781B6C', 'BB3654', 'EC6824', 'FBB41A', 'FCFFA4']}, 'Kaolinite + Calcite + Quartz', false);
+
+
+// Summary of steps:
+// - Defined a study area and loaded ASTER imagery
+// - Filtered images based on cloud cover and time period
+// - Applied atmospheric correction using Dark Object Subtraction
+// - Computed spectral indices for detecting key minerals
+// - Added individual mineral indices as layers for visualization
+// - Created a composite image for easier interpretation of multiple minerals
