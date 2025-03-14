@@ -1,0 +1,76 @@
+// youtube.com/@Geemap
+
+
+// Evapotranspiration and Crop Water Stress Monitoring Using MODIS Dataset in Google Earth Engine
+
+// 1. Define a point of interest for analysis
+var locationCoordinates = [99.6969069048778, 17.64899608036993];
+var pointOfInterest = ee.Geometry.Point(locationCoordinates);
+var Basin = ee.FeatureCollection("WWF/HydroSHEDS/v1/Basins/hybas_5")
+Map.addLayer(Basin, {}, 'Basins');
+
+// 2. Load the WWF/HydroSHEDS feature collection and filter it to the region of interest (ROI)
+var roiBasin = ee.FeatureCollection("WWF/HydroSHEDS/v1/Basins/hybas_5")
+  .filterBounds(pointOfInterest);
+// roiBasin filters the WWF/HydroSHEDS dataset to focus on the basin that contains the point of interest
+
+Map.centerObject(roiBasin,6);
+Map.addLayer(roiBasin, {}, 'Basin ROI');
+
+// 3. Load the MODIS Evapotranspiration (ET) and Potential Evapotranspiration (PET) dataset
+var startDate = '2001', endDate = '2024';
+var modisEtCollection = ee.ImageCollection("MODIS/061/MOD16A2GF")
+  .select('ET', 'PET') // Select ET and PET bands
+  .filterDate(startDate, endDate); // Filter the dataset for the date range
+
+// 4. Calculate mean Evapotranspiration (ET) over the entire period
+var meanEt = modisEtCollection.select('ET').mean().multiply(0.1); // Convert to correct units
+// meanEt calculates the average ET over the entire time period and multiplies by 0.1 to convert units from tenths of millimeters.
+
+Map.addLayer(meanEt.clip(roiBasin), {min: 0, max: 100, palette: ['blue', 'green', 'yellow', 'red']}, 'Mean ET (2001-2024)', false);
+
+// 5. Calculate mean ET for the summer season (June, July, August)
+var summerEt = modisEtCollection.select('ET')
+  .filter(ee.Filter.calendarRange(6, 8, 'month')) // Filter images for the summer months // Calculates the ET during the summer months (June, July, August).
+  .mean().multiply(0.1); // Convert to correct units (mm)
+Map.addLayer(summerEt.clip(roiBasin), {min: 0, max: 100, palette: ['blue', 'green', 'yellow', 'red']}, 'Summer ET', false);
+
+// 6. Export the mean ET image to Google Drive
+Export.image.toDrive({
+  image: meanEt.clip(roiBasin), 
+  description: 'Mean_ET_2001_2024', 
+  region: roiBasin, 
+  scale: 500,
+  crs: meanEt.projection().crs().getInfo(),
+  maxPixels: 1e13,
+  folder: 'evapotranspiration_analysis'
+});
+
+// 7. Compute Crop Water Stress Index (CWSI) using the equation: CWSI = 1 - (ET / PET)
+var cwsiCollection = modisEtCollection.map(function(image) {
+  var cwsiEquation = image.expression('1 - (et / pet)', {
+    'et': image.select('ET').multiply(0.1), // ET in mm
+    'pet': image.select('PET').multiply(0.1) // PET in mm
+  });
+  return cwsiEquation.rename('CWSI')
+    .copyProperties(image, ['system:time_start', 'system:time_end']); // Retain time properties
+});
+// This function computes the CWSI for each image in the MODIS dataset using the formula CWSI = 1 - (ET / PET).
+
+// 8. Calculate the mean CWSI across the time period
+var meanCwsi = cwsiCollection.mean();
+Map.addLayer(meanCwsi.clip(roiBasin), {min: 0, max: 1, palette: ['green', 'yellow', 'red']}, 'Mean CWSI', false);
+
+// 9. Load MODIS Land Cover dataset and select the crop area
+var landCover = ee.ImageCollection("MODIS/061/MCD12Q1")
+  .select('LC_Type1').mode(); // Get the most common land cover type
+var cropArea = landCover.eq(12); // Select the crop areas (class 12)
+// Loads the MODIS land cover dataset and identifies areas classified as cropland (class 12).
+
+Map.addLayer(cropArea.clip(roiBasin), {palette: ['green']}, 'Crop Areas', false);
+
+// 10. Mask the CWSI to show only crop areas
+var cwsiForCrops = meanCwsi.updateMask(cropArea);
+Map.addLayer(cwsiForCrops.clip(roiBasin), {min: 0, max: 1, palette: ['green', 'yellow', 'red']}, 'CWSI for Crops', false);
+
+// Filters the CWSI data to display only cropland areas
