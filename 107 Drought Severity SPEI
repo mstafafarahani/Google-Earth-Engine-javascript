@@ -1,0 +1,106 @@
+// Identifying Drought Severity Using Time Series Analysis (TSA) Method by SPEI Dataset From 1980-2023 in Google Earth Engine
+
+// 1. Load the HydroBASINS level 6 dataset to define the region of interest (ROI)
+var watershed = ee.FeatureCollection("WWF/HydroSHEDS/v1/Basins/hybas_6");
+Map.addLayer(watershed, [], 'Watershed');
+
+// Loads the HydroBASINS level 6 dataset and adds it to the map for visualization.
+
+// 2. Define the coordinates of a point within the ROI
+var coordinates = [69.68788964499849, 23.955387145159794];
+var pointOfInterest = ee.Geometry.Point(coordinates);
+
+// 3. Filter the basin collection to get the specific ROI containing the point
+var roi = watershed.filterBounds(pointOfInterest);
+
+// 4. Center the map on the ROI and add it to the map
+Map.centerObject(roi);
+Map.addLayer(roi, [], 'Study Area');
+
+// 5. Load the SPEI dataset and filter it to select the 12-month SPEI index from 1980 to 2023
+var speiCollection = ee.ImageCollection("CSIC/SPEI/2_9")
+  .select('SPEI_12_month')
+  .filterDate('1980', '2023')
+
+// 6. Plot a time series chart of the mean SPEI values over the ROI
+print(
+  ui.Chart.image.series(speiCollection, roi, ee.Reducer.mean(), 55000, 'system:time_start')
+)
+print(speiCollection)
+                                         // Drought Severity Classification //
+                                         
+// 7. Calculate the mean SPEI value for each image in the collection
+var speiWithMean = speiCollection.map(function(image){
+  
+// 8. Reduce the image to a mean value over the ROI
+  var meanValue = ee.Number(image.reduceRegion({
+    reducer: ee.Reducer.mean(), 
+    geometry: roi, 
+    scale: 55000
+  }).values().get(0))
+  
+// 9. Set the mean SPEI value as a property of the image
+  return image
+    .copyProperties(image, image.propertyNames())
+    .set('spei_mean', meanValue)
+})
+print(speiCollection)
+
+// 10. Classify the drought severity based on the mean SPEI value
+var speiClassified = speiWithMean.map(function(image){
+  var speiMeanValue = ee.Number(image.get('spei_mean'));
+  
+// 11. Classify the image into drought categories
+  var droughtClass = ee.Algorithms.If(speiMeanValue.lte(-2.0), 'Severe Drought', 
+                ee.Algorithms.If(speiMeanValue.gt(-2.0).and(speiMeanValue.lte(-1)), 'Moderate Drought',
+                ee.Algorithms.If(speiMeanValue.gt(-1).and(speiMeanValue.lte(0)), 'Mild Drought', 
+                ee.Algorithms.If(speiMeanValue.gt(0).and(speiMeanValue.lte(1)), 'Normal Conditions',
+                ee.Algorithms.If(speiMeanValue.gt(1), 'No Drought')))));
+                
+// 12. Set the drought classification as a property of the image
+  return image
+    .copyProperties(image, image.propertyNames())
+    .set('drought_class', ee.String(droughtClass));
+});
+
+// 13. Rename images in the collection based on their drought classification
+var droughtCollection = speiClassified.map(function(image){
+  var className = ee.String(image.get('drought_class'));
+  return image.rename(className)
+    .copyProperties(image, image.propertyNames());
+});
+
+// 14. Plot a time series line chart of the drought classification over time 1980 t0 2023
+
+var droughtSeries = ui.Chart.image.series({
+  imageCollection: droughtCollection,
+  region: roi,
+  reducer: ee.Reducer.mean(),
+  scale: 55000,
+  xProperty: 'system:time_start'
+})
+.setChartType('LineChart')
+.setSeriesNames([
+  'Mild Drought', 
+  'Moderate Drought', 
+  'No Drought', 
+  'Normal Conditions', 
+  'Severe Drought'
+])
+.setOptions({
+  title: 'Drought Temporal Classification',
+  pointSize: 3,
+  colors: [
+    '#FFD700',  // Mild Drought (Gold)
+    '#FFA07A',  // Moderate Drought (Light Salmon)
+    '#008000',  // No Drought (Green)
+    '#00CED1',  // Normal Conditions (Dark Turquoise)
+    '#FF4500'   // Severe Drought (Orange Red)
+  ],
+  hAxis: {title: 'Date'},
+  vAxis: {title: 'Drought Index'}
+});
+
+print(droughtSeries);
+
+  
