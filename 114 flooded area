@@ -1,0 +1,348 @@
+// How to Performs flood detection using Sentinel-1 SAR Imagery in Google Earth Engine
+
+// It includes steps for importing data, filtering and pre-processing images, calculating differences to detect flooding, 
+// and post-processing to refine flood detection. 
+
+// Study Area - Chennai
+
+// 1. Importing and Setting Up Data 
+
+// a. Administrative Boundaries:
+var admin2 = ee.FeatureCollection('FAO/GAUL_SIMPLIFIED_500m/2015/level2');
+// Imports the administrative boundaries dataset at level 2 (e.g., districts)..
+
+// b. HydroSHEDS DEM and Global Surface Water:
+var hydrosheds = ee.Image('WWF/HydroSHEDS/03VFDEM');
+var gsw = ee.Image('JRC/GSW1_3/GlobalSurfaceWater');
+//Imports the HydroSHEDS Digital Elevation Model (DEM) and Global Surface Water dataset.
+
+// 2. Dates
+var beforeStart = '2015-11-15';
+var beforeEnd = '2015-12-10';
+var afterStart = '2015-12-10';
+var afterEnd = '2016-01-23';
+// Defines date ranges for the periods before and after the flood event.
+
+// 3. AOI (Area of Interest):
+var chennai = admin2.filter(ee.Filter.eq('ADM2_NAME', 'Chennai'));
+var geometry = chennai.geometry();
+Map.addLayer(geometry, {color: 'grey'}, 'Chennai District');
+// Filters the administrative boundaries to select Chennai district and adds it to the map.
+
+// 4. Filtering Sentinel-1 SAR Data
+// Filtering Sentinel-1 Data:
+var collection = ee.ImageCollection('COPERNICUS/S1_GRD') // Filters Sentinel-1 Ground Range Detected (GRD) data for images with:
+  .filter(ee.Filter.eq('instrumentMode', 'IW')) //Instrument mode: IW (Interferometric Wide)
+  .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VH')) //Polarization: VH (Vertical transmit, Horizontal receive)
+  .filter(ee.Filter.eq('orbitProperties_pass', 'DESCENDING')) //Orbit pass: Descending
+  .filter(ee.Filter.eq('resolution_meters', 10)) //Resolution: 10 meters
+  .filter(ee.Filter.bounds(geometry)) //Within the AOI
+  .select('VH'); // VH (band): Dual-band cross-polarization, vertical transmit/horizontal receive
+
+                                                     //What is VV and VH polarization?//
+// Different combinations of vertical and horizontal wave polarizations are used to measure and detect different kinds of phenomenon and features. 
+// Capella Global Change Monitoring uses two different polarizations available from Sentinel-1: VV (vertical-vertical) and VH (vertical-horizontal)
+
+
+// 5. Splitting Data into Before and After Collections:
+var beforeCollection = collection.filter(ee.Filter.date(beforeStart, beforeEnd));
+var afterCollection = collection.filter(ee.Filter.date(afterStart, afterEnd));
+// Splits the data into two collections based on the defined date ranges.
+
+// 6. Processing the Images
+// Creating Mosaics and Clipping to AOI:
+var before = beforeCollection.mosaic().clip(geometry);
+var after = afterCollection.mosaic().clip(geometry);
+// Creates mosaics of the images in each collection and clips them to the AOI.
+
+// 7. Speckle Filtering and Calculating Differences
+// Applying Speckle Filter:
+var beforeFiltered = ee.Image(toDB(RefinedLee(toNatural(before))));
+var afterFiltered = ee.Image(toDB(RefinedLee(toNatural(after))));
+
+// Applies the Refined Lee speckle filter to the images. 
+// Functions toNatural, toDB, and RefinedLee convert images between dB and natural units and apply the filter.
+
+//var beforeFiltered = ee.Image(toDB(RefinedLee(toNatural(before))))
+//var afterFiltered = ee.Image(toDB(RefinedLee(toNatural(after))))
+
+// 8. Calculating Differences:
+var difference = afterFiltered.divide(beforeFiltered);
+//Calculates the ratio of the after flood image to the before flood image.
+
+// 5. Flood Detection
+// Define a Threshold:
+var diffThreshold = 1.25;
+var flooded = difference.gt(diffThreshold).rename('water').selfMask();
+// Identifies flooded areas by applying a threshold to the difference image.
+
+// 6. Visualize Layers:
+Map.centerObject(geometry, 10);
+Map.addLayer(before, {min: -25, max: 0}, 'Before Floods');
+Map.addLayer(after, {min: -25, max: 0}, 'After Floods');
+Map.addLayer(beforeFiltered, {min: -25, max: 0}, 'Before Filtered');
+Map.addLayer(afterFiltered, {min: -25, max: 0}, 'After Filtered');
+Map.addLayer(flooded, {min: 0, max: 1, palette: ['blue']}, 'Initial Flood Area');
+// Adds the before, after, and filtered images to the map for visualization.
+
+// 7. Mask Out Permanent/Semi-permanent Water:
+var permanentWater = gsw.select('seasonality').gte(5).clip(geometry);
+var permanentWaterMask = permanentWater.unmask(0).not();
+var flooded = flooded.updateMask(permanentWaterMask);
+// Masks out areas with permanent/semi-permanent water.
+
+// 8. Mask Out Areas with More Than 5 Percent Slope:
+var slopeThreshold = 5;
+var terrain = ee.Algorithms.Terrain(hydrosheds);
+var slope = terrain.select('slope');
+var steepAreas = slope.gt(slopeThreshold);
+var slopeMask = steepAreas.not();
+var flooded = flooded.updateMask(slopeMask);
+// Masks out areas with more than 5% slope using the HydroSHEDS DEM.
+
+// Reasons why areas with more than 5% slope are often masked out when creating flood inundation maps using Sentinel-1 SAR data 
+// and a Digital Elevation Model (DEM) like HydroSHEDS:
+// 8.1. Inaccuracy in Flood Detection on Steep Slopes: 
+// a. Radar signal behavior: Steep slopes can cause radar signals to bounce off the terrain at an angle, reducing the amount of backscatter that reaches the satellite. 
+//This can lead to underestimation of water depth or even misclassification of non-flooded areas as flooded.
+
+// b. Shadowing effects: Steep slopes can also cast shadows in the SAR image, making it difficult to distinguish between flooded areas 
+// and shadowed areas
+
+// 8.2. Focus on Areas with Higher Flood Risk:
+// a. Prioritization: Floodplain areas with lower slopes are generally considered to be at a higher risk of flooding compared to steep slopes. 
+// By masking out steep slopes, the analysis focuses on areas with a greater potential for flood impact on populations and infrastructure.
+
+// b. Computational efficiency: Excluding steep slopes can reduce the computational demands of flood inundation modeling, 
+// allowing for faster analysis of larger areas.
+
+// 9. Remove Isolated Pixels:
+var connectedPixelThreshold = 8;
+var connections = flooded.connectedPixelCount(25);
+var disconnectedAreas = connections.lt(connectedPixelThreshold);
+var disconnectedAreasMask = disconnectedAreas.not();
+var flooded = flooded.updateMask(disconnectedAreasMask);
+// Removes isolated pixels by considering connected pixel count.
+
+// 10. Final Visualization:
+Map.addLayer(flooded, {min: 0, max: 1, palette: ['red']}, 'Flooded Areas');
+// Adds the final detected flooded areas to the map.
+
+// 11. Calculate Affected Area
+print('Total District Area (km2)', geometry.area().divide(1000000));
+
+var stats = flooded.multiply(ee.Image.pixelArea()).reduceRegion({
+  reducer: ee.Reducer.sum(),
+  geometry: geometry,
+  scale: 10,
+  maxPixels: 1e10,
+  tileScale: 16
+});
+print('Flooded Area (km2)', ee.Number(stats.get('water')).divide(1000000));
+// Calculates and prints the total district area and the flooded area in km2.
+
+
+// 12. Speckle Filtering Functions
+
+//Flood inundation mapping using Synthetic Aperture Radar (SAR) data, such as Sentinel-1 imagery, involves several steps to preprocess, filter,
+// and analyze the data to accurately identify and map flood-affected areas. One critical preprocessing step is speckle filtering. 
+//Below, we will explain the detailed steps involved in this process, including the implementation of the Refined Lee speckle filter in Earth Engine (GEE).
+
+// 1. Convert Image Units
+
+// Convert from dB to Natural Units:
+// SAR images are often provided in decibel (dB) units. The first step is to convert these images to natural units.
+
+function toNatural(img) {
+  return ee.Image(10.0).pow(img.select(0).divide(10.0));
+}
+// This function takes an image in dB and converts it to natural units using the formula 10(img/10).
+
+// Convert from Natural Units to dB:
+// After processing, you may need to convert the image back to dB units.
+
+function toDB(img) {
+  return ee.Image(img).log10().multiply(10.0);
+}
+// This function converts an image from natural units back to dB units using the formula 10×log10(img).
+
+//2. Understanding Speckle Noise
+
+//Radar Signal and Speckle Noise:
+// Radar Signal: SAR uses radar pulses to image the Earth's surface. The reflected signal, or backscatter, varies due to random constructive 
+// and destructive interference between radar waves and reflecting objects on the ground.
+
+//Speckle Noise: This variation in backscatter intensity appears as grainy texture (speckle noise) in the SAR image, which can obscure important details
+
+// Speckle filtering is a crucial pre-processing step in flood inundation mapping using Synthetic Aperture Radar (SAR) data, specifically Sentinel-1. 
+// Here's why it's important
+
+//Speckle in SAR Images:
+// a. Radar signal: SAR uses radar pulses to image the Earth's surface. 
+// The reflected signal (backscatter) can vary due to the random constructive and destructive interference between the radar waves 
+// and the reflecting objects on the ground.
+
+// b. Speckle noise: This variation in backscatter intensity appears as a grainy texture in the SAR image, known as speckle noise.
+
+
+
+// 3. Speckle Filtering
+// Refined Lee Speckle Filter:
+// The Refined Lee filter is used to reduce speckle noise while preserving edges and details in SAR images. 
+// Below is a detailed explanation of how the Refined Lee filter is implemented.
+
+
+// Refined Lee Speckle Filter:
+// The function RefinedLee takes a SAR image in natural (non-dB) units and applies the Refined Lee speckle filter to it.
+
+function RefinedLee(img) {
+  
+// 3.1. Create a 3x3 kernel
+// A 3x3 kernel is used to compute local mean and variance.
+var weights3 = ee.List.repeat(ee.List.repeat(1, 3), 3);
+var kernel3 = ee.Kernel.fixed(3, 3, weights3, 1, 1, false);
+  
+// A 3x3 kernel is created to compute the local mean and variance within a 3x3 neighborhood.
+// Creates a 3x3 kernel of weights, where each weight is set to 1. This kernel will be used to compute local statistics.
+
+// 3.2. Compute the mean and variance using a 3x3 neighborhood
+
+var mean3 = img.reduceNeighborhood(ee.Reducer.mean(), kernel3);
+var variance3 = img.reduceNeighborhood(ee.Reducer.variance(), kernel3);
+// Computes the mean and variance of the image within the 3x3 neighborhood defined by the kernel.
+
+// 3.3. Sample Window Setup
+// Define a 7x7 sampling kernel with specific weights
+  var sample_weights = ee.List([
+    [0, 0, 0, 0, 0, 0, 0],
+    [0, 1, 0, 1, 0, 1, 0],
+    [0, 0, 0, 0, 0, 0, 0],
+    [0, 1, 0, 1, 0, 1, 0],
+    [0, 0, 0, 0, 0, 0, 0],
+    [0, 1, 0, 1, 0, 1, 0],
+    [0, 0, 0, 0, 0, 0, 0]
+  ]);
+// A 7x7 sampling kernel is used to gather statistics from a broader neighborhood.
+
+  var sample_kernel = ee.Kernel.fixed(7, 7, sample_weights, 3, 3, false);
+// Defines a 7x7 kernel with specific weights to sample the windows. 
+// This kernel will be used to determine gradients and directions within a larger neighborhood.
+
+
+// 3.4. Compute the mean and variance in the sampled windows
+//  Neighborhood Statistics Calculation:
+  var sample_mean = mean3.neighborhoodToBands(sample_kernel);
+  var sample_var = variance3.neighborhoodToBands(sample_kernel);
+// Calculates the mean and variance for the sampled windows and stores them as bands.
+
+// 3.5. Gradient Calculation:
+// Compute gradients to identify maximum gradient direction
+  var gradients = sample_mean.select(1).subtract(sample_mean.select(7)).abs();
+  gradients = gradients.addBands(sample_mean.select(6).subtract(sample_mean.select(2)).abs());
+  gradients = gradients.addBands(sample_mean.select(3).subtract(sample_mean.select(5)).abs());
+  gradients = gradients.addBands(sample_mean.select(0).subtract(sample_mean.select(8)).abs());
+// Computes the gradients in different directions to determine the direction of maximum change within the sampled windows.
+
+//  Maximum Gradient Determination:
+  var max_gradient = gradients.reduce(ee.Reducer.max());
+
+  var gradmask = gradients.eq(max_gradient);
+
+  gradmask = gradmask.addBands(gradmask);
+// Identifies the maximum gradient direction for each pixel and creates a mask for the pixels with the maximum gradient.  
+
+// 3.6. Direction Calculation:
+// Determine the direction of the maximum gradient
+
+  var directions = sample_mean.select(1).subtract(sample_mean.select(4))
+    .gt(sample_mean.select(4).subtract(sample_mean.select(7))).multiply(1);
+  directions = directions.addBands(sample_mean.select(6).subtract(sample_mean.select(4))
+    .gt(sample_mean.select(4).subtract(sample_mean.select(2))).multiply(2));
+  directions = directions.addBands(sample_mean.select(3).subtract(sample_mean.select(4))
+    .gt(sample_mean.select(4).subtract(sample_mean.select(5))).multiply(3));
+  directions = directions.addBands(sample_mean.select(0).subtract(sample_mean.select(4))
+    .gt(sample_mean.select(4).subtract(sample_mean.select(8))).multiply(4));
+  directions = directions.addBands(directions.select(0).not().multiply(5));
+  directions = directions.addBands(directions.select(1).not().multiply(6));
+  directions = directions.addBands(directions.select(2).not().multiply(7));
+  directions = directions.addBands(directions.select(3).not().multiply(8));
+
+  directions = directions.updateMask(gradmask);
+
+  directions = directions.reduce(ee.Reducer.sum());
+// Calculates eight possible directions for the gradients and determines which direction each pixel is aligned with, using the gradient mask.
+
+// Sample Statistics Calculation:
+
+// 3.7. Compute local noise variance
+  var sample_stats = sample_var.divide(sample_mean.multiply(sample_mean));
+
+  var sigmaV = sample_stats.toArray().arraySort().arraySlice(0, 0, 5).arrayReduce(ee.Reducer.mean(), [0]);
+// Calculates the sample statistics and the local noise variance, sigmaV.
+
+// 3.8. Define Larger Kernels
+// Setup 7x7 rectangular and diagonal kernels for directional statistics
+
+// Define kernels for directional statistics
+  var rect_weights = ee.List.repeat(ee.List.repeat(0, 7), 3).cat(ee.List.repeat(ee.List.repeat(1, 7), 4));
+
+  var diag_weights = ee.List([
+    [1, 0, 0, 0, 0, 0, 0],
+    [1, 1, 0, 0, 0, 0, 0],
+    [1, 1, 1, 0, 0, 0, 0],
+    [1, 1, 1, 1, 0, 0, 0],
+    [1, 1, 1, 1, 1, 0, 0],
+    [1, 1, 1, 1, 1, 1, 0],
+    [1, 1, 1, 1, 1, 1, 1]
+  ]);
+  
+  var rect_kernel = ee.Kernel.fixed(7, 7, rect_weights, 3, 3, false);
+  var diag_kernel = ee.Kernel.fixed(7, 7, diag_weights, 3, 3, false);
+// Sets up 7x7 rectangular and diagonal kernels for directional statistics.
+
+// 3.9 Compute Directional Statistics
+// Calculate the mean and variance for each direction and combine them.
+
+  var dir_mean = img.reduceNeighborhood(ee.Reducer.mean(), rect_kernel).updateMask(directions.eq(1));
+  var dir_var = img.reduceNeighborhood(ee.Reducer.variance(), rect_kernel).updateMask(directions.eq(1));
+
+  dir_mean = dir_mean.addBands(img.reduceNeighborhood(ee.Reducer.mean(), diag_kernel).updateMask(directions.eq(2)));
+  dir_var = dir_var.addBands(img.reduceNeighborhood(ee.Reducer.variance(), diag_kernel).updateMask(directions.eq(2)));
+
+  for (var i = 1; i < 4; i++) {
+    dir_mean = dir_mean.addBands(img.reduceNeighborhood(ee.Reducer.mean(), rect_kernel.rotate(i)).updateMask(directions.eq(2 * i + 1)));
+    dir_var = dir_var.addBands(img.reduceNeighborhood(ee.Reducer.variance(), rect_kernel.rotate(i)).updateMask(directions.eq(2 * i + 1)));
+    dir_mean = dir_mean.addBands(img.reduceNeighborhood(ee.Reducer.mean(), diag_kernel.rotate(i)).updateMask(directions.eq(2 * i + 2)));
+    dir_var = dir_var.addBands(img.reduceNeighborhood(ee.Reducer.variance(), diag_kernel.rotate(i)).updateMask(directions.eq(2 * i + 2)));
+  }
+
+  dir_mean = dir_mean.reduce(ee.Reducer.sum());
+  dir_var = dir_var.reduce(ee.Reducer.sum());
+  
+// Computes the mean and variance for each direction and combines them.
+
+// 3.10. Compute Filtered Value
+// Calculate the final filtered image using the directional statistics.
+
+  var varX = dir_var.subtract(dir_mean.multiply(dir_mean).multiply(sigmaV)).divide(sigmaV.add(1.0));
+  var b = varX.divide(dir_var);
+  var result = dir_mean.add(b.multiply(img.subtract(dir_mean)));
+  return(result.arrayFlatten([['sum']]));
+}
+// Calculates the filtered value using the computed directional statistics and returns the result as the final filtered image.
+
+
+// This function applies a refined Lee speckle filter to reduce noise in SAR imagery. 
+// It involves several steps including calculating local statistics, determining directional statistics, 
+// and computing the final filtered value.
+
+                                  // Summary of Refined Lee Speckle Filter function //
+//The Refined Lee Speckle Filter function:
+//a. Computes local mean and variance using a 3x3 kernel.
+//b. Uses a 7x7 kernel to sample the neighborhood, calculate gradients, and determine directions.
+//c. Computes directional statistics using larger kernels.
+//d. Applies the refined Lee filter formula to reduce speckle noise while preserving edges and details in the SAR image.
+
+
+
+//This code highlighting the data import, image filtering, flood detection, and post-processing steps used for flood mapping using Sentinel-1 SAR imagery.
