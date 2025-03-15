@@ -1,0 +1,140 @@
+var gsw = ee.Image("JRC/GSW1_4/GlobalSurfaceWater"),
+    srtm = ee.Image("USGS/SRTMGL1_003"),
+    roi = 
+    /* color: #d63000 */
+    /* shown: false */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[103.35134004474025, -1.298697830961928],
+          [103.35134004474025, -1.7983916129498208],
+          [103.87319063067775, -1.7983916129498208],
+          [103.87319063067775, -1.298697830961928]]], null, false),
+    l8 = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2");
+// Get water data
+var water = gsw.select('occurrence').clip(roi);
+Map.addLayer(water, { min: 0, max: 100, palette: ['white', 'cyan', 'blue' ]}, 'Water', false);
+Map.centerObject(roi)
+// Permanent water 
+var permanent = water.gt(80);
+Map.addLayer(permanent.selfMask(), { palette: 'blue' }, 'Permanent Water', false);
+
+// Rainbow palette
+var rainbow = ['blue', 'cyan', 'green', 'yellow', 'red'];
+
+// Distance from water
+var distance = permanent.fastDistanceTransform().divide(30).clip(roi).reproject('EPSG:4326', null, 30);
+Map.addLayer(distance, { max: 0, min: 5000, palette: rainbow}, 'Distance', false);
+
+// Only the distance without permanent water
+var onlyDistance = distance.updateMask(distance.neq(0).and(srtm.mask()));
+Map.addLayer(onlyDistance, { min: 0, max: 5000, palette: rainbow}, 'Distance from permanent water', false);
+
+// Distance
+var distanceScore = onlyDistance.where(onlyDistance.gt(4000), 1)
+  .where(onlyDistance.gt(3000).and(onlyDistance.lte(4000)), 2)
+  .where(onlyDistance.gt(2000).and(onlyDistance.lte(3000)), 3)
+  .where(onlyDistance.gt(1000).and(onlyDistance.lte(2000)), 4)
+  .where(onlyDistance.lte(1000), 5);
+Map.addLayer(distanceScore, { min: 1, max: 5, palette: rainbow }, 'Distance hazard score', false);
+  
+// Elevation data
+var elevation = srtm.clip(roi);
+Map.addLayer(elevation, { min: 0, max: 100, palette: ['green', 'yellow', 'red', 'white'] }, 'DEM', false);
+
+// Eelvation score
+var elevScore = elevation.updateMask(distance.neq(0)).where(elevation.gt(20), 1)
+  .where(elevation.gt(15).and(elevation.lte(20)), 2)
+  .where(elevation.gt(10).and(elevation.lte(15)), 3)
+  .where(elevation.gt(5).and(elevation.lte(10)), 4)
+  .where(elevation.lte(5), 5);
+Map.addLayer(elevScore, { min: 1, max: 5, palette: rainbow }, 'Elevation hazard score', false);
+
+// Create topographic position index
+var tpi = elevation.subtract(elevation.focalMean(5).reproject('EPSG:4326', null, 30)).rename('TPI');
+Map.addLayer(tpi, { min: -5, max: 5, palette: ['blue', 'yellow', 'red'] }, 'TPI', false);
+
+// Topo score
+var topoScore = tpi.updateMask(distance.neq(0)).where(tpi.gt(0), 1)
+  .where(tpi.gt(-2).and(tpi.lte(0)), 2)
+  .where(tpi.gt(-4).and(tpi.lte(-2)), 3)
+  .where(tpi.gt(-6).and(tpi.lte(-4)), 4)
+  .where(tpi.lte(-8), 5);
+Map.addLayer(topoScore, { min: 1, max: 5, palette: rainbow }, 'Topographic hazard score', false);
+
+// Landsat 8
+var landsat8 = l8.filterBounds(roi).filterDate('2022-01-01', '2022-12-31').map(cloudMask).median().clip(roi);
+Map.addLayer(landsat8, { min: [0.1, 0.05, 0], max: [0.4, 0.3, 0.15], bands: ['B5', 'B6', 'B2']}, 'Landsat 8', false);
+
+// Band map
+var bandMap = {
+  RED: landsat8.select('B4'),
+  NIR: landsat8.select('B5'),
+  GREEN: landsat8.select('B3'),
+};
+
+// NDVI
+var ndvi = landsat8.expression('(NIR - RED) / (NIR + RED)', bandMap).rename('NDVI');
+Map.addLayer(ndvi, { min: -1, max: 1, palette: ['blue', 'white', 'green']}, 'NDVI', false);
+
+// Vegetaion score
+var vegScore = ndvi.updateMask(distance.neq(0)).where(ndvi.gt(0.8), 1)
+  .where(ndvi.gt(0.6).and(ndvi.lte(0.8)), 2)
+  .where(ndvi.gt(0.4).and(ndvi.lte(0.6)), 3)
+  .where(ndvi.gt(0.2).and(ndvi.lte(0.4)), 4)
+  .where(ndvi.lte(0.2), 5);
+Map.addLayer(vegScore, { min: 1, max: 5, palette: rainbow }, 'Vegetation hazard score', false);
+
+// NDWI
+var ndwi = landsat8.expression('(GREEN - NIR) / (GREEN + NIR)', bandMap).rename('NDWI');
+Map.addLayer(ndwi, { min: -1, max: 1, palette: ['red', 'white', 'blue']}, 'NDWI', false);
+
+// Wetness score
+var wetScore = ndwi.updateMask(distance.neq(0)).where(ndwi.gt(0.6), 5)
+  .where(ndwi.gt(0.2).and(ndwi.lte(0.6)), 4)
+  .where(ndwi.gt(-0.2).and(ndwi.lte(0.2)), 3)
+  .where(ndwi.gt(-0.6).and(ndwi.lte(-0.2)), 2)
+  .where(ndwi.lte(-0.6), 1);
+Map.addLayer(wetScore, { min: 1, max: 5, palette: rainbow }, 'Wetness hazard score', false);
+
+// Flood hazard
+var floodHazard = distanceScore.add(topoScore).add(vegScore).add(wetScore).add(elevScore).rename('Flood_hazard');
+Map.addLayer(floodHazard, { min: 1, max: 20, palette: rainbow }, 'Flood hazard');
+
+// Flood hazard scored
+var floodHazardScore = floodHazard.where(floodHazard.gt(15), 5)
+  .where(floodHazard.gt(10).and(floodHazard.lte(15)), 4)
+  .where(floodHazard.gt(5).and(floodHazard.lte(10)), 3)
+  .where(floodHazard.gt(0).and(floodHazard.lte(5)), 2)
+  .where(floodHazard.lte(0), 1);
+Map.addLayer(floodHazardScore, { min: 1, max: 5, palette: rainbow }, 'Flood hazard score');
+
+// Add legend
+var panel = ui.Panel([ ui.Label('Flood hazard', { fontWeight: 'bold' }) ], ui.Panel.Layout.flow('vertical'), { position: 'bottom-left' });
+var labels = [ 'Very low', 'Low', 'Medium', 'High', 'Very high' ];
+var values = [ 1, 2, 3, 4, 5 ];
+labels.map(function(label, index){
+  panel.add(ui.Panel([
+      ui.Label('', { backgroundColor: rainbow[index], height: '20px', width: '30px', border: '1px solid black' }),
+      ui.Label(label, { height: '20px' }),
+    ], ui.Panel.Layout.flow('horizontal')
+  ));
+});
+Map.add(panel);
+
+// Function to cloudmask landsat 8
+function cloudMask(image){
+  var qa = image.select('QA_PIXEL');
+  var dilated = 1 << 1;
+  var cirrus = 1 << 2;
+  var cloud = 1 << 3;
+  var shadow = 1 << 4;
+  var mask = qa.bitwiseAnd(dilated).eq(0)
+    .and(qa.bitwiseAnd(cirrus).eq(0))
+    .and(qa.bitwiseAnd(cloud).eq(0))
+    .and(qa.bitwiseAnd(shadow).eq(0));
+  return image.select(['SR_B.*'], ['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7']).multiply(0.0000275).add(-0.2).updateMask(mask);
+}
