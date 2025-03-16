@@ -1,0 +1,140 @@
+//YOUTube.com/@GEEmap
+
+var geometry = 
+    /* color: #98ff00 */
+    /* shown: false */
+    ee.Geometry.Point([77.10680661520584, 28.60555637630291]);
+
+// Downscaling Landcover Classification Dataset Using Machine Learning (MLA) Approach in Google Earth Engine
+
+// 1. Define the study area using coordinates for a point
+var studyPoint = [77.10680661520584, 28.60555637630291];
+var pointGeometry = ee.Geometry.Point(studyPoint);
+
+// 2. Load WWF HydroSHEDS basin boundaries and filter to the region of interest (ROI)
+var HydroshedBasin = ee.FeatureCollection("WWF/HydroSHEDS/v1/Basins/hybas_5");
+Map.addLayer(HydroshedBasin, {}, 'HydroshedBasin');
+
+var basinBoundaries = ee.FeatureCollection("WWF/HydroSHEDS/v1/Basins/hybas_5");
+var regionOfInterest = basinBoundaries.filterBounds(pointGeometry).map(function(basin) {
+  return basin.simplify(3000); // Simplify geometry to reduce processing complexity
+});
+
+Map.centerObject(regionOfInterest); // Center the map on the ROI
+Map.addLayer(regionOfInterest, {}, 'Region of Interest'); // Add ROI to the map
+
+// 3. Define the time period for analysis
+var analysisStart = '2020';
+var analysisEnd = '2021';
+
+// 4. Load MODIS land cover data for the specified time period and select land cover band
+var modisLandcover = ee.ImageCollection("MODIS/061/MCD12Q1")
+  .select('LC_Type1')
+  .filterDate(analysisStart, analysisEnd)
+  .first(); // Retrieve the first image from the filtered collection
+
+// Visualization parameters for MODIS land cover classes
+var landcoverVisParams = {
+  min: 1.0,
+  max: 17.0,
+  palette: [
+    '05450a', '086a10', '54a708', '78d203', '009900', 'c6b044', 'dcd159',
+    'dade48', 'fbff13', 'b6ff05', '27ff87', 'c24f44', 'a5a5a5', 'ff6d4c',
+    '69fff8', 'f9ffa4', '1c0dff'
+  ],
+};
+
+// Display the MODIS land cover data for ROI
+Map.addLayer(modisLandcover.clip(regionOfInterest), landcoverVisParams, 'MODIS Land Cover 500m', false);
+
+// 5. Define predictor variables from Landsat 8 data and calculate indices
+var landsatImages = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2")
+  .select('SR_B.*')
+  .filterDate(analysisStart, analysisEnd)
+  .filterBounds(regionOfInterest)
+  .filter(ee.Filter.lt('CLOUD_COVER', 10))
+  .map(function(image) {
+    
+// Apply gain and offset adjustments for surface reflectance
+    var gain = ee.Number(image.get('REFLECTANCE_MULT_BAND_1'));
+    var offset = ee.Number(image.get('REFLECTANCE_ADD_BAND_1'));
+    var correctedImage = image.multiply(gain).add(offset)
+
+// Calculate NDVI and NDWI, and select SWIR bands
+    var ndvi = correctedImage.normalizedDifference(['SR_B5', 'SR_B4']).rename('NDVI');
+    var ndwi = correctedImage.normalizedDifference(['SR_B3', 'SR_B5']).rename('NDWI');
+    var swirBands = correctedImage.select('SR_B[6-7]');
+
+    return ee.Image.cat([ndvi, ndwi, swirBands]);
+  });
+print(landsatImages)
+
+// Calculate statistical percentiles for Landsat predictor variables
+var landsatStats = landsatImages.reduce(ee.Reducer.percentile([25, 50, 75]));
+print(landsatStats)
+// A reducer that computes the 25th, 50th, and 75th percentiles of pixel values across the image collection for each pixel location.
+
+/*
+The result is a single ee.Image containing three bands for each input band (e.g., NDVI, NDWI, SWIR):
+p25: The 25th percentile for each pixel.
+p50: The median (50th percentile) for each pixel.
+p75: The 75th percentile for each pixel.
+
+25th Percentile (p25): Represents lower-end conditions, such as minimum vegetation health or wetness.
+50th Percentile (p50, Median): Reduces the effect of outliers, providing a robust central tendency value.
+75th Percentile (p75): Highlights higher-end conditions, such as maximum vegetation health or wetness.
+
+This helps summarize variability across the Landsat time-series data and is particularly useful for feature extraction in machine learning models.
+*/
+
+// 6. Add urban area data as a predictor
+var urbanLayer2020 = ee.Image('JRC/GHSL/P2023A/GHS_BUILT_S/2020').select('built_surface');
+var urbanVisParams = {min: 0.0, max: 8000.0, palette: ['000000', 'FFFFFF']};
+Map.addLayer(urbanLayer2020.clip(regionOfInterest), urbanVisParams, 'Urban Area 2020', false);
+
+// 7. Load Sentinel-1 SAR data and filter for descending orbit
+var sarImages = ee.ImageCollection("COPERNICUS/S1_GRD")
+  .filterDate(analysisStart, analysisEnd)
+  .filterBounds(regionOfInterest)
+  .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VV'))
+  .filter(ee.Filter.eq('instrumentMode', 'IW'))
+  .filter(ee.Filter.eq('orbitProperties_pass', 'DESCENDING'))
+  .select('VV')
+  .mean(); // Calculate the mean of the SAR images
+
+// 8. Prepare the dataset by combining all predictor layers (Landsat stats, urban data, SAR, and MODIS)
+var predictorDataset = landsatStats.addBands(urbanLayer2020).addBands(modisLandcover).addBands(sarImages);
+
+// 9. Create a training dataset using stratified sampling
+var trainingSamples = predictorDataset.stratifiedSample({
+  numPoints: 100,
+  classBand: 'LC_Type1',
+  region: regionOfInterest,
+  scale: 100
+});
+
+// 10. Train a machine learning model (SVM) on the training dataset
+var landcoverClassifier = ee.Classifier.libsvm().train({
+  features: trainingSamples,
+  classProperty: 'LC_Type1',
+  inputProperties: predictorDataset.bandNames()
+});
+
+// 11. Classify land cover at higher resolution using the trained model
+var predictorBands = predictorDataset.bandNames().remove('LC_Type1');
+var highResolutionLandcover = predictorDataset.select(predictorBands).classify(landcoverClassifier);
+
+// Display the high-resolution land cover classification
+Map.addLayer(highResolutionLandcover.clip(regionOfInterest), landcoverVisParams, 'High-Resolution Land Cover 50m', false);
+print(highResolutionLandcover);
+
+// 12. Export the high-resolution land cover classification
+Export.image.toDrive({
+  image: highResolutionLandcover.clip(regionOfInterest),
+  description: 'HighRes_LandCover',
+  scale: 50,
+  region: regionOfInterest,
+  crs: 'EPSG:4326',
+  maxPixels: 1e13,
+  folder: 'landcover_classification'
+});
