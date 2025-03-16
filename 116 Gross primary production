@@ -1,0 +1,31 @@
+//YOUTUBE.com/@geemap
+
+// Gross Primary Productivity (GPP) 8-Day Global 500M
+// GPP, is the rate at which solar energy is captured in sugar molecules during photosynthesis.
+
+// 1. Import the country feasture collection
+var country_names = ['Iran'];
+var countries = ee.FeatureCollection('USDOS/LSIB_SIMPLE/2017');
+var myCountries = countries.filter(ee.Filter.inList('country_na', country_names));
+var myRegion = myCountries.geometry();
+
+// 2. Add the layer
+Map.addLayer(myRegion, {}, 'East Afria Countries');
+Map.centerObject(myRegion, 4);
+
+// 3. Define period 
+var startdate = ee.Date.fromYMD(2012, 1, 1);
+var enddate = ee.Date.fromYMD(2012, 12, 31);
+
+// 4. Filter gpp                       
+var gppCollection = ee.ImageCollection('MODIS/006/MYD17A2H')
+.filterDate(startdate, enddate)
+.filterBounds(myRegion)
+.select('Gpp')
+.sum();
+
+// 5. Create vizualtion settings 
+var gpp_viz = {min:0.0, max:15000, palette: 'ff0000, f0ff00, 004717'};
+
+// 6. Add the image
+Map.addLayer(gppCollection.clip(myRegion), gpp_viz, 'GPP');
