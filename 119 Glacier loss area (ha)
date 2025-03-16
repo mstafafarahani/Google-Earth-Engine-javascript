@@ -1,0 +1,237 @@
+
+//YOUTUBE.COM/@GEEmap
+
+var roi = 
+    /* color: #d63000 */
+    /* shown: false */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[137.0982080257251, -3.9888154580710573],
+          [137.0982080257251, -4.149770299345922],
+          [137.26025636556886, -4.149770299345922],
+          [137.26025636556886, -3.9888154580710573]]], null, false),
+    l8 = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2"),
+    l9 = ee.ImageCollection("LANDSAT/LC09/C02/T1_L2"),
+    l5 = ee.ImageCollection("LANDSAT/LT05/C02/T1_L2"),
+    l7 = ee.ImageCollection("LANDSAT/LE07/C02/T1_L2"),
+    l4 = ee.ImageCollection("LANDSAT/LT04/C02/T1_L2"),
+    dem = ee.Image("NASA/NASADEM_HGT/001");
+
+
+// Zoom to region
+Map.centerObject(roi);
+
+// Change to satellite view
+Map.setOptions('SATELLITE');
+
+// Visualization parameter
+// NIR-SWIR1-GREEN composite
+var visMs = { max: [0.3, 0.4, 0.2], min: [0.05, 0.1, 0.01], bands: ['B6', 'B5', 'B3'] };
+
+// Visualization parameter for indices
+var paletteVeg = ['red', 'orange', 'lightyellow', 'lightgreen', 'green'];
+var paletteWet = ['red', 'pink', 'white', 'lightskyblue', 'blue'];
+
+// Formula for multiple indices
+var indicesProp = [
+ { name: 'NDSI', formula: 'NDSI = (GREEN - SWIR1) / (GREEN + SWIR1)', palette: paletteWet },
+ { name: 'NDMI', formula: 'NDMI = (NIR - SWIR1) / (NIR + SWIR1)', palette: paletteVeg },
+  // { name: 'NBR', formula: 'NBR = (NIR - SWIR2) / (NIR + SWIR2)', palette: paletteVeg },
+  // { name: 'NDWI', formula: 'NDWI = (GREEN - NIR) / (GREEN + NIR)', palette: paletteWet },
+  // { name: 'MNDWI2', formula: 'MNDWI = (GREEN - SWIR2) / (GREEN + SWIR2)', palette: paletteWet }
+];
+
+// Years to analyze
+var years = [1990, 1995, 2000, 2005, 2010, 2015, 2020, 2024];
+
+// Run all years
+var glacierData = ee.ImageCollection(years.map(function(year){
+  // Date parameter
+  var start = year + '-01-01';
+  var end = year + '-12-31';
+  
+  // Collection by year
+  var col = year > 2013 ? 
+    l8.filterBounds(roi).filterDate(start, end)
+      .merge(l9.filterBounds(roi).filterDate(start, end))
+      .map(cloudMasking)
+    : l4.filterBounds(roi).filterDate(start, end)
+      .merge(l5.filterBounds(roi).filterDate(start, end))
+      .merge(l7.filterBounds(roi).filterDate(start, end))
+      .map(cloudMaskingTm);
+  
+  // Get image
+  var image = col.median().clip(roi);
+  Map.addLayer(image, visMs, 'Landsat_' + year, false);
+  
+  // Band map for indices
+  var bandMap = {
+    NIR: image.select('B5'),
+    SWIR1: image.select('B6'),
+    GREEN: image.select('B3'),
+    SWIR2: image.select('B7')
+  };
+  
+  // Make indices
+  var indices = ee.Image(indicesProp.map(function(prop){
+    var indexImage = image.expression(prop.formula, bandMap);
+    //Map.addLayer(indexImage, { min: -1, max: 1, palette: prop.palette }, prop.name + '_' + year, false);
+    return indexImage;
+  }));
+  
+  // Get glacier cover from indices + DEM
+  var glacier = indices.select('NDMI').gt(0.7)
+    .and(indices.select('NDSI').gt(0.7))
+    .and(dem.select(0).gt(4000));
+  Map.addLayer(glacier.selfMask(), { palette: 'dodgerblue' }, 'Glacier_' + year, false);
+  
+  // Calculate glacier area
+  var glacierArea = ee.Number(ee.Image.pixelArea().divide(1e4).updateMask(glacier).reduceRegion({
+    reducer: ee.Reducer.sum(),
+    scale: 30,
+    maxPixels: 1e13,
+    geometry: roi
+  }).get('area')).toInt();
+  
+  // Return data
+  return ee.Image([
+    glacier.rename('glacier'),
+    glacier.selfMask().multiply(year).rename('glacier_year').toUint16()
+  ]).set({
+    glacier_area: glacierArea,
+    year: year
+  });
+}));
+
+// Glacier loss
+var paletteVis = { min: years[0], max: years[years.length - 2], palette: ['lightyellow', 'gold', 'orange', 'orangered', 'red', 'darkred'] };
+var glacierLossMap = glacierData
+  .select('glacier_year')
+  .max();
+glacierLossMap = glacierLossMap
+  .updateMask(glacierLossMap.lt(years[years.length - 1]));
+Map.addLayer(glacierLossMap, paletteVis, 'Glacier Loss Map');
+
+// Current glacier
+var glacierCurrent = glacierData.sort('year', false).first().select(0).selfMask();
+Map.addLayer(glacierCurrent, { palette: 'dodgerblue' }, 'Glacier current ' + years[years.length - 1]);
+
+// Print Glacier area first and last
+var firstYear = ee.Number(glacierData.first().get('glacier_area'));
+var lastYear = ee.Number(glacierData.sort('year', false).first().get('glacier_area'));
+var change = firstYear.subtract(lastYear);
+var changePerYear = change.divide(years.length);
+var changePercent = change.divide(firstYear).multiply(100)
+  .multiply(100).toInt().divide(100);
+var changePercentPerYear = changePerYear.divide(firstYear).multiply(100)
+  .multiply(100).toInt().divide(100);
+print(
+  ee.String('Glacier ' + years[0] + ': ').cat(firstYear).cat(' Ha'),
+  ee.String('Glacier ' + years[years.length - 1] + ': ').cat(lastYear).cat(' Ha'),
+  ee.String('Glacier loss ' + years[0] + ' - ' + years[years.length - 1] + ': ').cat(change).cat(' Ha / ').cat(changePercent).cat(' %'),
+  ee.String('Glacier loss per year ' + years[0] + ' - ' + years[years.length - 1] + ': ').cat(lastYear).cat(' Ha / ').cat(changePercentPerYear).cat(' %')
+);
+
+// Legend
+legendDiscrete(['dodgerblue'], ['Current glacier (2024)'], '', 'bottom-left');
+legendGradient('Glacier loss year', paletteVis, 'bottom-left');
+
+// Glacier area change
+var glacierChart = ui.Chart.feature.byFeature(glacierData, 'year', ['glacier_area'])
+  .setChartType('AreaChart')
+  .setOptions({
+    title: 'Glacier Area 1990 - 2020',
+    hAxis: { title: 'Year' },
+    vAxis: { title: 'Glacier Area (Ha)' }
+  });
+print(glacierChart);
+
+// Function for cloud masking
+function cloudMasking(image){
+  var qa = image.select('QA_PIXEL');
+  var mask = ee.Image([2, 3, 4].map(function(n){ return qa.bitwiseAnd(1 << n).eq(0) }))
+    .reduce(ee.Reducer.allNonZero());
+  return image.select(['SR_B.*'], ['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7'])
+    .updateMask(mask).multiply(0.0000275).add(-0.2);
+}
+
+// Function for cloud masking
+function cloudMaskingTm(image){
+  var qa = image.select('QA_PIXEL');
+  var mask = ee.Image([2, 3, 4].map(function(n){ return qa.bitwiseAnd(1 << n).eq(0) }))
+    .reduce(ee.Reducer.allNonZero());
+  return image.select(['SR_B.*'], ['B2', 'B3', 'B4', 'B5', 'B6', 'B7'])
+    .updateMask(mask).multiply(0.0000275).add(-0.2);
+}
+
+// Discrete panel legend
+function legendDiscrete(palette, names, title, position){
+  // Make a legend
+  var panel = ui.Panel([ ui.Label(title, { fontWeight: 'bold', fontSize: 'small' }) ], ui.Panel.Layout.flow('vertical'), { position: position || 'bottom-left' });
+  Map.add(panel);
+  
+  // Add legend list
+  names.map(function(label, index){
+    panel.add(ui.Panel(
+      [
+        ui.Label('', { backgroundColor: palette[index], width: '30px', height: '15px', border: 'thin solid black' }),
+        ui.Label(label, { height: '15px', fontSize: 'smaller' })
+      ],
+    ui.Panel.Layout.flow('horizontal')
+    ));
+  });
+}
+
+// Legend function
+function legendGradient(name, vis, position){
+  var geom = ee.Geometry({
+    "geodesic": false,
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          112.38333164500061,
+          -0.4965121527071768
+        ],
+        [
+          112.45199619578186,
+          -0.4965121527071768
+        ],
+        [
+          112.45199619578186,
+          0.011599308565035363
+        ],
+        [
+          112.38333164500061,
+          0.011599308565035363
+        ],
+        [
+          112.38333164500061,
+          -0.4965121527071768
+        ]
+      ]
+    ]
+  }); 
+  
+  var panel = ui.Panel([ui.Label(name, { fontWeight: 'bold', stretch: 'horizontal', textAlign: 'center' })], ui.Panel.Layout.flow('vertical'), { position: position, stretch: 'horizontal' });
+  var lonLat = ee.Image.pixelLonLat().select('latitude').clip(geom);
+  var minMax = lonLat.reduceRegion({
+    scale: 1000,
+    maxPixels: 1e13,
+    reducer: ee.Reducer.minMax(),
+    geometry: geom
+  });
+  var max = ee.Number(minMax.get('latitude_max'));
+  var min = ee.Number(minMax.get('latitude_min'));
+  var visualized = lonLat.visualize({ min: min, max: max, palette: vis.palette });
+  var thumbnail = ui.Thumbnail(visualized, {}, null, { border: 'thin solid black', textAlign: 'center', stretch: 'horizontal', height: '200px', fontSize: 'smaller' });
+  
+  panel.add(ui.Label(vis.max, { textAlign: 'center', stretch: 'horizontal' }));
+  panel.add(thumbnail);
+  panel.add(ui.Label(vis.min, { textAlign: 'center', stretch: 'horizontal'}));
+  Map.add(panel);
+}
