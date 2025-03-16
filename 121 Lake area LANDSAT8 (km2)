@@ -1,0 +1,86 @@
+//YOUTUBE.COM/@GEEmap
+
+// Calculate the Lake Area Using Landsat 8 Imagery
+
+// 1. Define the Region  of Interest (ROI)
+var geometry = 
+    /* color: #0b4a8b */
+    /* shown: false */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[80.12830565128651, 13.202924266175192],
+          [80.12830565128651, 13.134059531220826],
+          [80.19697020206776, 13.134059531220826],
+          [80.19697020206776, 13.202924266175192]]], null, false);
+
+
+Map.addLayer(geometry)
+Map.centerObject(geometry, 12);
+
+// This section defines a polygon representing the ROI using a set of coordinates. The polygon is added to the map for visualization.
+
+// 2. Set Time Period for Analysis
+
+var time_start = '2016', time_end = '2022'
+// This specifies the time range for filtering the Landsat imagery (from 2016 to 2022).
+
+// 3. Filter and Process Landsat 8 Imagery
+
+var landsat = ee.ImageCollection('LANDSAT/LC08/C02/T1_L2') // This section filters the Landsat 8 image collection:
+.filterDate(time_start, time_end)             // To include images from 2016 to 2022.
+.filter(ee.Filter.lt('CLOUD_COVER', 10))      // To include images with less than 10% cloud cover.
+.filter(ee.Filter.calendarRange(6,9,'month')) // To include images from June to September
+.filterBounds(geometry).map(function(img){
+  var bands = img.select('SR_.*').multiply(2.75e-05).add(-0.2);
+  // 1. This scaling factor is likely used to convert the integer values stored in the image bands to actual surface reflectance values. 
+  // Landsat 8 surface reflectance products often use scaling factors to store data efficiently.
+  // 2. This adds a constant value of `-0.2` to the scaled surface reflectance values. 
+  // This adjustment might be necessary to further correct or normalize the reflectance values
+  
+  var ndwi = bands.normalizedDifference(['SR_B3','SR_B5']).rename('ndwi'); 
+  // For each image, it computes the NDWI using bands 3 (green) and 5 (near-infrared). NDWI is used to highlight water bodies.
+  return ndwi           // It normalizes the bands, calculates the NDWI, and retains the image properties.
+  .copyProperties(img, img.propertyNames())
+  }).median(); // It computes the median of the NDWI over the filtered images.
+
+// 4. Add Layers to the Map
+// This section adds two layers to the map:  
+Map.addLayer(landsat.clip(geometry), [], 'ndwi');  // ndwi: The median NDWI clipped to the ROI.
+Map.addLayer(landsat.clip(geometry).gt(0), [], 'ndwi_threshold'); // ndwi_threshold: The thresholded NDWI (pixels with NDWI > 0) clipped to the ROI.
+
+// 5. Create and Add a Masked NDWI Layer
+var threshold = landsat.gt(0.1);
+var mask = threshold.updateMask(threshold);
+// This section creates a binary mask for NDWI values greater than 0.1 
+// and applies the mask to highlight areas with significant water presence.
+
+Map.addLayer(mask, [], 'ndwi_masked');
+
+// 6. Calculate and Add Pixel Area Layer
+var pixel_area = mask.multiply(ee.Image.pixelArea().divide(1e6));
+
+// This section calculates the area of each pixel in square kilometers for the masked NDWI layer 
+// and adds the layer to the map.
+
+Map.addLayer(pixel_area.clip(geometry), [], 'ndwi_pixel_area');
+
+// 7. Calculate Total Water Area
+var lake_area = pixel_area.reduceRegion({
+  reducer: ee.Reducer.sum(), geometry: geometry, scale: 100
+  }).values().get(0);
+  
+// print(ee.Number(lake_area))  
+print('Lake area (km2)', ee.Number(lake_area));
+
+
+
+// This section calculates the total water area within the ROI by summing the pixel areas in the masked NDWI layer.
+// The total water area is printed to the console section. 
+
+// This script identifies and visualizes water bodies within a specified ROI using Landsat 8 imagery and NDWI. 
+// It filters the data for specific time periods, cloud cover, and months, 
+// calculates NDWI, applies a threshold to identify significant water bodies, calculates pixel areas  
