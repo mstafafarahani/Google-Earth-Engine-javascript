@@ -1,0 +1,55 @@
+//  Lake Shoreline Change Detection Analysis (2016 - 2023) using Sentinel-2A Imagery in Earth Engine
+
+// 1. Define the region of interest (ROI) using simple coordinates
+var roi = ee.Geometry.Polygon([
+  [44.55107983227968, 38.3194216829954],
+  [44.55107983227968, 37.03255346988956],
+  [46.27044018384218, 37.03255346988956],
+  [46.27044018384218, 38.3194216829954]
+]);
+
+Map.centerObject(roi);
+
+// 2. Calculate NDWI (Normalized Difference Water Index) for a given year
+function calculateNDWI(year) {
+  var collection = ee.ImageCollection("COPERNICUS/S2")
+    .filterDate(year + '-01-01', year + '-12-31')
+    .filterBounds(roi)
+    .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 10))
+    .map(function(image) {
+      var ndwi = image.normalizedDifference(['B3', 'B8']).rename('NDWI');
+      return ndwi;
+    })
+    .median()
+    .gt(0.1);
+  return collection;
+}
+
+// 3. Calculate NDWI for 2016 and 2023 and display on the map
+var ndwi2016 = calculateNDWI('2016');
+var ndwi2023 = calculateNDWI('2023');
+
+Map.addLayer(ndwi2016.clip(roi), {palette: ['green', 'orange', 'red']}, 'NDWI 2016', false);
+Map.addLayer(ndwi2023.clip(roi), {palette: ['green', 'orange', 'red']}, 'NDWI 2023', false);
+
+// 4. Detect changes by subtracting NDWI of 2023 from 2016
+var changeDetection = ndwi2016.subtract(ndwi2023);
+Map.addLayer(changeDetection.clip(roi), {palette: ['red', 'green', 'blue']}, 'Change Detection', false);
+
+// 5. Convert the change mask to vector format
+var changeMask = changeDetection.updateMask(changeDetection);
+var changeVector = changeMask.reduceToVectors({
+  geometry: roi,
+  scale: 250,
+  maxPixels: 1e13
+});
+
+Map.addLayer(changeVector, {}, 'Change Vector');
+
+// 6. Export the change vector to Google Drive
+Export.table.toDrive({
+  collection: changeVector,
+  description: 'LakeChangeVector2016_2023',
+  fileFormat: 'SHP',
+  folder: 'LakeChangeDetection'
+});
