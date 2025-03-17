@@ -1,0 +1,399 @@
+
+
+
+// Script to predict 10-meter resolution Land Surface Temperature using Sentinel-2, SRTM, and Landsat TIRS data
+// Sentinel-2 and its derivation are used as predictor, although not every one of it
+// Landsat TIRS data: ST_B10 as LST is the label
+
+//youtube.com/@geemap
+
+
+var s2 = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED"),
+    l9 = ee.ImageCollection("LANDSAT/LC09/C02/T1_L2"),
+    l8 = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2"),
+    srtm = ee.Image("USGS/SRTMGL1_003"),
+    geometry = 
+    /* color: #d63000 */
+    /* shown: false */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[100.04006344361214, -0.03677390657597935],
+          [100.04006344361214, -1.0447116211954588],
+          [101.03707272095589, -1.0447116211954588],
+          [101.03707272095589, -0.03677390657597935]]], null, false),
+    cloud = ee.ImageCollection("GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED");
+// 1. Set the parameter for modelling
+ 
+// Define ROI
+var roi = geometry;
+Map.centerObject(roi);
+
+// Define date to predict
+var start = '2024-06-01';
+var end = '2024-07-31';
+
+// LST label as prediction
+var label = 'LST';
+
+// Predictors list from Sentinel-2 and elevation
+var predictors = [
+  'B2', 'B3', 'B4', 'B8', 'B11', 'B12', 
+  'NDMI', 'NBR', 'NBR2', 'NDWI', 'MNDWI', 'MNDWI2', 
+  'elevation', 'TPI', 'slope',
+  'wetness', 'greeness', 'dryness'
+];
+
+// Final predictors size to predict LST
+// Change if you want to use more
+var finalPredictorsSize = 3;
+
+// Train ratio to split train and test
+var train_ratio = 0.7;
+
+// LST unit
+var unit = 'Celcius';
+
+// Visualization parameter LST
+var lstVis = {
+  min: 20,
+  max: 40,
+  palette: ['black', 'purple', 'blue', 'cyan', 'green', 'yellow', 'red']
+};
+
+
+// 2. Preprocess Data
+
+// Filter object to help on filtering Sentinel-2 and Landsat data
+var filter = ee.Filter.and(
+  ee.Filter.bounds(roi),
+  ee.Filter.date(start, end)
+);
+
+// Generate Landsat data using median cloudfree composite to get LST
+var lstLandsat = l8.filter(filter)
+  .merge(l9.filter(filter))
+  .map(cloudMaskLandsat)
+  .mean()
+  .clip(geometry);
+Map.addLayer(lstLandsat, lstVis, 'LST Landsat');
+
+// Generate Sentinel-2 data using median cloudfree composite to get the MS data
+var s2Image = s2.filter(filter)
+  .linkCollection(cloud.filter(filter), 'cs')
+  .map(cloudMaskS2)
+  .median()
+  .clip(geometry);
+Map.addLayer(s2Image, { min: [0.1, 0.05, 0.025], max: [0.4, 0.3, 0.25], bands: ['B8', 'B11', 'B12'] }, 'S2 Image');
+
+// Palette to visualize indices
+var rdylgn = ['red', 'lightyellow', 'green'];
+var rdbl = ['red', 'white', 'blue'];
+
+// Indices props
+var indices = [
+  { name: 'NDMI', formula: 'NDMI = (NIR - SWIR1) / (NIR + SWIR1)', palette: rdylgn },
+  { name: 'NBR', formula: 'NBR = (NIR - SWIR2) / (NIR + SWIR2)', palette: rdylgn },
+  { name: 'NBR2', formula: 'NBR2 = (SWIR1 - SWIR2) / (SWIR1 + SWIR2)', palette: rdylgn },
+  { name: 'NDWI', formula: 'NDWI = (GREEN - NIR) / (GREEN + NIR)', palette: rdbl },
+  { name: 'MNDWI1', formula: 'MNDWI = (GREEN - SWIR1) / (GREEN + SWIR1)', palette: rdbl },
+  { name: 'MNDWI2', formula: 'MNDWI2 = (GREEN - SWIR2) / (GREEN + SWIR2)', palette: rdbl }
+];
+
+// Indices image
+var indicesImage = ee.Image(indices.map(function(dict){
+  var indice = s2Image.expression(dict.formula, {
+    NIR: s2Image.select('B8'),
+    SWIR1: s2Image.select('B11'),
+    SWIR2: s2Image.select('B12'),
+    GREEN: s2Image.select('B3')
+  });
+  
+  Map.addLayer(indice, { min: -1, max: 1, palette: dict.palette }, dict.name, false);
+  
+  return indice;
+}));
+
+// Stratification of elevation as class band for stratified sample
+// Use elevation because high correlation of elevation and LST
+// Divide into 7 classes
+var strat = ee.Image(0)
+  .where(srtm.lt(0), 1)
+  .where(srtm.gte(0).and(srtm.lt(10)), 2)
+  .where(srtm.gte(10).and(srtm.lt(50)), 3)
+  .where(srtm.gte(50).and(srtm.lt(100)), 4)
+  .where(srtm.gte(100).and(srtm.lt(500)), 5)
+  .where(srtm.gte(500).and(srtm.lt(1000)), 6)
+  .where(srtm.gte(1000), 7)
+  .selfMask()
+  .rename('elevation_class');
+Map.addLayer(strat, { min: 1, max: 7 }, 'Elevation class', false);
+
+// Simple land cover to create other derivative data from Sentinel-2
+var wet = indicesImage.select('MNDWI2').gt(0);
+var green = indicesImage.select('NDMI').gt(0.1).and(wet.eq(0));
+var dry = wet.eq(0).and(green.eq(0));
+
+// ...ness map
+// Additional map from land cover using focal operation of the land cover
+var wetness = wet.focalMean(1, 'square', 'pixels', 10).rename('wetness');
+Map.addLayer(wetness, { min: 0, max: 1, palette: ['red', 'white', 'blue']}, 'Wetness', false);
+
+var greeness = green.focalMean(1, 'square', 'pixels', 10).rename('greeness');
+Map.addLayer(greeness, { min: 0, max: 1, palette: ['red', 'lightyellow', 'green'] }, 'Greeness', false);
+
+var dryness = dry.focalMean(1, 'square', 'pixels', 10).rename('dryness');
+Map.addLayer(dryness, { min: 0, max: 1, palette: lstVis.palette }, 'Dryness', false);
+
+// Topography position index
+var topoAverage = srtm.focalMean(5, 'square', 'pixels');
+var tpi = srtm.subtract(topoAverage).rename('TPI');
+Map.addLayer(tpi, { min: -5, max: 5, palette: ['red', 'lightyellow', 'blue'] }, 'TPI', false);
+
+// Slope
+var slope = ee.Terrain.slope(srtm);
+Map.addLayer(slope, { min: 0, max: 100 }, 'Slope', false);
+
+// Features list to extract sample
+var features = ee.Image([
+  s2Image, indicesImage, srtm, tpi, slope, strat, wetness, greeness, dryness
+]);
+
+
+// 3. Sample and features selection
+
+// Sample extraction
+var sample = features.addBands(lstLandsat).stratifiedSample({
+  scale: 30,
+  numPoints: 1e3,
+  region: roi,
+  classBand: 'elevation_class'
+});
+
+// Predictors list + LST
+// Get the list of predictors with LST after that for reduceColumns
+var predictorsLst = [];
+for (var i = 0; i < predictors.length; i++){
+  predictorsLst.push(predictors[i]);
+  predictorsLst.push('LST');
+}
+
+// Calculate correlation between predictors/features with LST
+var correlationReduce = sample.reduceColumns(ee.Reducer.pearsonsCorrelation().repeat(predictors.length), predictorsLst);
+
+// Correlation table
+var correlationTable = ee.FeatureCollection(predictors.map(function(band, index){
+  var corr = ee.Number(ee.List(correlationReduce.get('correlation')).get(index));
+  return ee.Feature(null, {
+    feature: band,
+    r2: corr.pow(2)
+  });
+}));
+
+// Select how many features to used to filter as next step
+// To limit correlation matrix, limit to the number of your predictors size multiplied by two
+var predictorsSize = finalPredictorsSize * 2;
+
+// Show top correlated features with LST
+var topCorrelation = correlationTable.limit(predictorsSize, 'r2', false).aggregate_array('feature');
+print(ee.String('Top ' + predictorsSize + ' related features with LST: ').cat(topCorrelation.join(', ')));
+
+// Correlation chart
+var corrChart = ui.Chart.feature.byFeature(correlationTable, 'feature', ['r2'])
+  .setChartType('ColumnChart')
+  .setOptions({
+    title: 'Correlation Coefficient ^ 2 with LST',
+    hAxis: { title: 'Feature' },
+    vAxis: { title: 'R^2' },
+  });
+print(corrChart);
+
+// Correlation lists to create correlation matrix between features
+var sequenceCorrelation = ee.List.sequence(0, topCorrelation.size().subtract(1));
+var correlationLists = sequenceCorrelation.map(function(num0){
+  return sequenceCorrelation.map(function(num1){
+    return [topCorrelation.get(num0), topCorrelation.get(num1)];
+  });
+}).flatten();
+
+// Calculate correlation matrix
+var correlationMatrixReduce = ee.List(sample.reduceColumns(
+  ee.Reducer.pearsonsCorrelation().repeat(sequenceCorrelation.size().pow(2)),
+  correlationLists
+).get('correlation'));
+
+// Make the correlation matrix into a table
+var correlationMatrixTable = ee.FeatureCollection(sequenceCorrelation.map(function(index1){
+  index1 = ee.Number(index1);
+  var variable = topCorrelation.get(index1);
+  var values = sequenceCorrelation.map(function(index2){
+    index2 = ee.Number(index2);
+    return correlationMatrixReduce.get(index1.multiply(sequenceCorrelation.size()).add(index2));
+  });
+  var dict = ee.Dictionary.fromLists(topCorrelation, values);
+  return ee.Feature(null, dict).set({
+    main_variable: variable,
+    averageCorrelation: values.reduce(ee.Reducer.mean()),
+    medianCorrelation: values.reduce(ee.Reducer.median())
+  });
+}));
+
+// Show correlation matrix table
+topCorrelation.evaluate(function(list){
+  var correlationMatrixChart = ui.Chart.feature.byFeature(correlationMatrixTable, 'main_variable', list)
+    .setChartType('Table');
+  print('Correlation Matrix Between Top Features', correlationMatrixChart);
+});
+
+// Show average correlation matrix between features
+var averageCorrelationMatrixChart = ui.Chart.feature.byFeature(correlationMatrixTable, 'main_variable', ['averageCorrelation', 'medianCorrelation'])
+  .setChartType('ColumnChart')
+  .setOptions({
+    title: 'Average Correlation Matrix Value Between Top Features',
+    hAxis: { title: 'Feature' },
+    vAxis: { title: 'Average Correlation Matrix' }
+  });
+print(averageCorrelationMatrixChart);
+
+// Take only lowest n correlation matrix value
+var lowestMatrix = finalPredictorsSize;
+var lowestCorrelationMatrix = correlationMatrixTable.limit(lowestMatrix, 'averageCorrelation')
+  .aggregate_array('main_variable');
+print(ee.String('Lowest ' + lowestMatrix).cat(' average correlation matrix: ').cat(lowestCorrelationMatrix.join(', ')));
+
+// Show main predictors correlation chart with LST
+lowestCorrelationMatrix.evaluate(function(list){
+  list.map(function(feature){
+    var chart = ui.Chart.feature.byFeature(sample.randomColumn().limit(1000, 'random'), 'LST', [feature])
+      .setChartType('ScatterChart')
+      .setOptions({
+        title: 'Correlation LST x ' + feature,
+        hAxis: { title: 'LST (Celcius)' },
+        vAxis: { title: feature},
+        dataOpacity: 0.3,
+        trendlines: [
+          { showR2: true, visibleInLegend: true, opacity: 1 },
+        ]
+      });
+    print(chart);
+  });
+});
+
+// Split sample to train and test
+sample = sample.randomColumn();
+var train = sample.filter(ee.Filter.lte('random', train_ratio));
+var test = sample.filter(ee.Filter.gt('random', train_ratio));
+
+
+// 4. Modelling and Assessment
+
+// Create model with only the top features
+var model = ee.Classifier.smileRandomForest(50)
+  .setOutputMode('REGRESSION')
+  .train(train, label, lowestCorrelationMatrix);
+
+// Show relative importance features for modelling
+var importance = ee.Dictionary(model.explain().get('importance'));
+var keys = importance.keys();
+var values = importance.values();
+var sum = values.reduce(ee.Reducer.sum());
+var relative = values.map(function(value){ return ee.Number(value).divide(sum).multiply(100) });
+var relativeImportance = ee.Dictionary.fromLists(keys, relative);
+print('Relative Importance', relativeImportance);
+
+// Test model by applying model to test data
+var testApply = test.classify(model, 'prediction').map(function(feat){
+  var ref = ee.Number(feat.get('LST'));
+  var pred = ee.Number(feat.get('prediction'));
+  var error = ref.subtract(pred);
+  var errorAbs = error.abs();
+  return feat.set({
+    error: error,
+    errorAbs: errorAbs,
+    line: ref
+  });
+});
+
+// Calculate R2 and MAE
+var stats = testApply.reduceColumns(ee.Reducer.mean().combine(ee.Reducer.pearsonsCorrelation()), ['errorAbs', 'LST', 'prediction']);
+var mae = ee.Number(stats.get('mean'));
+var r2 = ee.Number(stats.get('correlation')).pow(2);
+print(
+  ee.String('R^2: ').cat(r2), 
+  ee.String('MAE: ').cat(mae).cat(' ').cat(unit)
+);
+
+// Show 1:1 plot
+var plot = ui.Chart.feature.byFeature(testApply.randomColumn('chart').limit(1000, 'chart'), 'LST', ['prediction', 'line'])
+  .setChartType('ScatterChart')
+  .setOptions({
+    title: 'LST Reference vs Prediction',
+    hAxis: { title: 'Reference (Celcius)', viewWindow: { min: 20, max: 50 } },
+    vAxis: { title: 'Prediction (Celcius)', viewWindow: { min: 20, max: 50 } },
+    dataOpacity: 0.3,
+    series: [
+      {},
+      { pointsVisible : false }
+    ],
+    trendlines: [
+      { showR2: true, visibleInLegend: true, opacity: 0.3 },
+      { showR2: false, visibleInLegend: true, label: '1:1 line', opacity: 1 }
+    ]
+  });
+print(plot);
+
+// 5. Result
+
+// Show the predicted LST result
+var lstPrediction = features.classify(model, 'LST');
+Map.addLayer(lstPrediction, lstVis, 'LST Prediction');
+
+// Export result if needed
+Export.image.toDrive({
+  image: lstPrediction.toInt16().unmask(-9999),
+  scale: 10,
+  maxPixels: 1e13,
+  crs: 'EPSG:4326',
+  region: roi,
+  folder: 'GEE_LST',
+  description: 'LST_10m_prediction',
+  formatOptions: {
+    cloudOptimized: true,
+    noData: -9999
+  }
+});
+
+// Show histogram of reference and prediction
+var histogramRefPred = ui.Chart.image.histogram({
+  image: ee.Image([lstLandsat.rename('Reference'), lstPrediction.rename('Prediction')]),
+  region: roi,
+  scale: 100,
+  maxPixels: 1e13,
+}).setOptions({
+  title: 'Histogram LST Reference vs Prediction'
+});
+print(histogramRefPred);
+
+// Function to cloud mask landsat
+function cloudMaskLandsat(image){
+  var qa = image.select('QA_PIXEL');
+  var mask = ee.Image([1, 2, 3, 4].map(function(num){
+    return qa.bitwiseAnd(1 << num).eq(0);
+  })).reduce(ee.Reducer.allNonZero());
+  return image.select(['ST_B10'], [label])
+    .updateMask(mask)
+    .multiply(0.00341802)
+    .add(149)
+    .add(-273.15);
+}
+
+// Function to to cloud mask sentinel-2
+function cloudMaskS2(image){
+  var mask = image.select('cs').gt(0.6);
+  return image.select(['B.*'])
+    .updateMask(mask)
+    .multiply(1e-4);
+}
