@@ -1,0 +1,191 @@
+/*
+YOUTUBE.com/@geeMAP
+Mangrove Biomass 2020- 2023 Using Google Earth Engine
+
+
+Steps
+
+1.Copy code in my Channel Description
+
+2.Load mangrove dataset
+
+3.Set the center of the map
+
+4.Add mangroves layer
+
+5.Add Sentinel-2 imagery for 2020
+
+6.Add Sentinel-2 imagery for 2023
+
+7.Calculate NDVI for 2020
+
+8.Calculate NDVI for 2023
+
+9. Calculate NDVI change (2020 - 2023)
+
+10.Thresholds for significant changes
+
+11.Create binary images for loss, gain, and no change
+
+12. Convert binary images to vector polygons
+
+13.Merge the loss, gain, and no change vectors into a single FeatureCollection
+
+14.Create a legend
+
+code------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+*/
+// Load mangrove dataset
+var dataset = ee.ImageCollection('LANDSAT/MANGROVE_FORESTS');                                  
+var mangrovesVis = {
+  min: 0,
+  max: 1.0,
+  palette: ['d40115'],
+};
+
+// Set the center of the map                                                       
+Map.setCenter(79.5129, 10.3315, 13);
+
+// Add mangroves layer
+Map.addLayer(dataset, mangrovesVis, 'Mangroves');
+
+// Add Sentinel-2 imagery for 2020                                                               
+var sentinel2020 = ee.ImageCollection('COPERNICUS/S2')
+  .filterDate('2020-01-01', '2020-12-31')
+  .filterBounds(ee.Geometry.Point(79.5129, 10.3315))
+  .median();
+var sentinelVis = {
+  bands: ['B4', 'B3', 'B2'], // Red, Green, Blue bands
+  min: 0,
+  max: 3000,
+  gamma: 1.4,
+};
+Map.addLayer(sentinel2020, sentinelVis, 'Sentinel-2 2020');                      
+
+// Add Sentinel-2 imagery for 2023                                                                                         
+var sentinel2023 = ee.ImageCollection('COPERNICUS/S2')
+  .filterDate('2023-01-01', '2023-12-31')
+  .filterBounds(ee.Geometry.Point(79.5129, 10.3315))
+  .median();
+Map.addLayer(sentinel2023, sentinelVis, 'Sentinel-2 2023');
+
+// Calculate NDVI for 2020                                                                                                           
+var ndvi2020 = sentinel2020.normalizedDifference(['B8', 'B4']).rename('NDVI_2020');
+var ndviVis = {
+  min: -1,
+  max: 1,
+  palette: ['blue', 'white', 'green'],
+};
+Map.addLayer(ndvi2020, ndviVis, 'NDVI 2020');
+
+// Calculate NDVI for 2023                                                                                                          
+var ndvi2023 = sentinel2023.normalizedDifference(['B8', 'B4']).rename('NDVI_2023');
+Map.addLayer(ndvi2023, ndviVis, 'NDVI 2023');
+
+// Calculate NDVI change (2023 - 2020)                                                                                                                                                       
+var ndviChange = ndvi2023.subtract(ndvi2020).rename('NDVI_Change');
+var ndviChangeVis = {
+  min: -0.5,
+  max: 0.5,
+  palette: ['red', 'white', 'green'], // Red for decrease, Green for increase
+};
+Map.addLayer(ndviChange, ndviChangeVis, 'NDVI Change (2020-2023)');
+
+// Thresholds for significant changes                                                                                                                                                                              
+var lossThreshold = -0.2; // Significant vegetation loss
+var gainThreshold = 0.2;  // Significant vegetation gain
+
+// Create binary images for loss, gain, and no change                                                                                                                     
+var vegetationLoss = ndviChange.lt(lossThreshold).selfMask();
+var vegetationGain = ndviChange.gt(gainThreshold).selfMask();
+var noChange = ndviChange.gte(lossThreshold).and(ndviChange.lte(gainThreshold)).selfMask();
+
+// Convert binary images to vector polygons                                                              
+var lossVectors = vegetationLoss.reduceToVectors({
+  geometryType: 'polygon',
+  reducer: ee.Reducer.countEvery(),
+  scale: 10,
+  maxPixels: 1e8
+}).map(function(feature) {
+  return feature.set('change', 'loss');
+});
+
+var gainVectors = vegetationGain.reduceToVectors({
+  geometryType: 'polygon',
+  reducer: ee.Reducer.countEvery(),
+  scale: 10,
+  maxPixels: 1e8
+}).map(function(feature) {
+  return feature.set('change', 'gain');
+});
+
+var noChangeVectors = noChange.reduceToVectors({
+  geometryType: 'polygon',
+  reducer: ee.Reducer.countEvery(),
+  scale: 10,
+  maxPixels: 1e8
+}).map(function(feature) {
+  return feature.set('change', 'no_change');
+});
+
+
+
+
+
+// Create a legend
+function createLegend() {
+  var legend = ui.Panel({
+    style: {
+      position: 'bottom-left',
+      padding: '8px 15px'
+    }
+  });
+  
+  var legendTitle = ui.Label({
+    value: 'Change Detection Legend',
+    style: {
+      fontWeight: 'bold',
+      fontSize: '16px',
+      margin: '0 0 4px 0',
+      padding: '0'
+    }
+  });
+  
+  legend.add(legendTitle);
+
+  // Color legend: loss, gain, no change
+  var changeTypes = [
+    {color: 'FF0000', label: 'Loss'},
+    {color: '00FF00', label: 'Gain'},
+    {color: '808080', label: 'No Change'}
+  ];
+
+  changeTypes.forEach(function(type) {
+    var colorBox = ui.Label({
+      style: {
+        backgroundColor: '#' + type.color,
+        padding: '10px',
+        margin: '0 0 4px 0'
+      }
+    });
+    var description = ui.Label({
+      value: type.label,
+      style: {margin: '0 0 4px 6px'}
+    });
+    
+    var legendRow = ui.Panel({
+      widgets: [colorBox, description],
+      layout: ui.Panel.Layout.flow('horizontal')
+    });
+    
+    legend.add(legendRow);
+  });
+
+  return legend;
+}
+
+// Add the legend to the map
+Map.add(createLegend());
+
+//code------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 
