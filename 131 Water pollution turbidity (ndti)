@@ -1,0 +1,134 @@
+//                                                 YOUTUBE.com/@GEEmap
+
+//  Water Turbidity Mapping using Sentinel-2 Images in Google Earth Engine: A Case Study on Mahanadi Basin 
+
+/*
+The Turbidity Index (TI) is a measure used to assess the clarity or turbidity of water, 
+which is influenced by the presence of suspended particles and other contaminants. 
+It can be calculated using remote sensing data from satellites like Sentinel-2A.
+
+Normalized Difference Turbidity Index (NDTI)
+(NDTI) is an index used in remote sensing to estimate the turbidity of water bodies. Turbidity is a measure of water clarity 
+and is influenced by the presence of suspended particles, such as sediment, algae, and other pollutants. 
+The NDTI leverages the differences in  reflectance between the red and green bands of satellite imagery 
+to highlight areas with varying levels of turbidity.
+
+Interpretation
+Positive NDTI values: Indicate higher turbidity.
+Negative NDTI values: Indicate lower turbidity.
+The NDTI values typically range from -1 to 1, and higher positive values correspond to more turbid (less clear) water.
+*/
+
+// 1. Define the region of interest (ROI)
+var coordinates = 
+    /* color: #d63000 */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+        [[86.01728415270877, 20.867517904666165],
+          [86.01728415270877, 19.877530444762456],
+          [87.0733449437244, 19.877530444762456],
+          [87.0733449437244, 20.867517904666165]];
+
+var areaOfInterest = ee.Geometry.Polygon(coordinates);
+Map.addLayer(areaOfInterest, {}, 'Study Area', false);
+Map.centerObject(areaOfInterest);
+
+// 2. Select Sentinel-2 images and filter them
+var sentinel2Collection = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+  .select(['B2', 'B3', 'B4', 'B8'])
+  .filterDate('2023-01-01', '2023-12-31')
+  .filterBounds(areaOfInterest)
+  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 10))
+  .median()
+  .multiply(0.0001); // Scale the reflectance values
+  print(sentinel2Collection);
+  
+Map.addLayer(sentinel2Collection.clip(areaOfInterest), 
+  {bands: ['B4', 'B3', 'B2'], min: 0.051, max: 0.322, gamma: 1.1}, // No adjustment to brightness and contrast
+  'True Color Composite', false);
+
+// 3. Add the Sentinel-2 false color composite to the map
+Map.addLayer(sentinel2Collection.clip(areaOfInterest), 
+  {bands: ['B8', 'B4', 'B3'], min: 0.051, max: 0.322, gamma: 1.1}, 
+  'False Color Composite', false);
+
+// 4. Calculate the Normalized Difference Water Index (NDWI)
+/*
+Normalized Difference Water Index (NDWI)
+NDWI is a remote sensing-derived index designed to highlight water bodies in satellite images. 
+The NDWI utilizes the green and near-infrared (NIR) bands to maximize the reflectance of water bodies 
+and minimize the reflectance of non-water features like vegetation and soil.
+*/
+var ndwi = sentinel2Collection.normalizedDifference(['B3', 'B8']).rename('NDWI');
+Map.addLayer(ndwi.clip(areaOfInterest), {
+  palette: ['green', 'orange', 'red']
+}, 'Normalized Difference Water Index', false);
+
+// 5. Print a histogram of NDWI values within the ROI
+print(ui.Chart.image.histogram(ndwi, areaOfInterest, 100));
+
+// 6. Threshold the NDWI to create a water mask
+var waterMask = ndwi.gt(0.1);
+Map.addLayer(waterMask.clip(areaOfInterest), {
+  palette: ['green', 'blue']
+}, 'Water Mask', false);
+
+// 7. Apply the water mask to the Sentinel-2 collection
+var waterMaskedSentinel2 = sentinel2Collection.updateMask(waterMask);
+Map.addLayer(waterMaskedSentinel2.clip(areaOfInterest), {}, 'Masked Water Sentinel-2', false);
+
+// 8. Calculate the Normalized Difference Turbidity Index (NDTI)
+var ndti = waterMaskedSentinel2.normalizedDifference(['B4', 'B3']).rename('NDTI');
+Map.addLayer(ndti.clip(areaOfInterest), {
+  palette: ['blue', 'green', 'yellow', 'orange', 'red']
+}, 'Normalized Difference Turbidity Index', false);
+
+print(ui.Chart.image.histogram(ndti, areaOfInterest, 100));
+
+// 9. Threshold the NDTI to create a turbidity mask from NDTI Histogram to identify high turbid areas
+var turbidityMask = ndti.gt(0.0156);
+Map.addLayer(turbidityMask.clip(areaOfInterest), {
+  palette: ['green', 'red']
+}, 'High Turbidity Area', false);
+
+
+// 10. Export the NDTI image to Google Drive
+Export.image.toDrive({
+  image: ndti.clip(areaOfInterest),
+  description: 'Sentinel2_NDTI',
+  region: areaOfInterest,
+  scale: 10,
+  crs: ndti.projection().crs(),
+  maxPixels: 1e13,
+  folder: 'Water_Turbidity_Mapping'
+});
+
+/*
+Applications of NDTI
+1. Water Quality Monitoring
+a. Suspended Sediment Concentration: NDTI can help identify areas with high concentrations of suspended sediments, 
+which is crucial for assessing sediment transport and deposition in water bodies.
+b. Algal Bloom Detection: By identifying changes in turbidity, NDTI can be used to monitor algal blooms, which affect water quality and aquatic life.
+
+2. Environmental Management
+a. Pollution Assessment: NDTI can help detect and monitor pollution events in water bodies, such as runoff from agricultural fields, 
+urban areas, and industrial sites.
+b. Habitat Protection: Monitoring turbidity helps protect habitats that are sensitive to changes in water clarity, 
+such as coral reefs and submerged aquatic vegetation.
+
+3. Hydrological Studies
+a. Erosion and Sediment Transport: NDTI can be used to study erosion patterns and sediment transport in rivers, lakes, and coastal areas, 
+which are essential for understanding geomorphological processes.
+b. Flood Impact Assessment: During and after flood events, NDTI can help assess the extent of turbidity changes due to sediment-laden floodwaters.
+
+4. Aquaculture Management
+Fish Farm Monitoring: Turbidity levels are critical for the health of fish farms. NDTI can assist in monitoring 
+and managing turbidity to maintain optimal conditions for aquaculture.
+
+5. Drinking Water Supply Management
+Reservoir and Lake Management: NDTI can help manage reservoirs and lakes used for drinking water supply by monitoring turbidity levels, 
+ensuring the water remains clear and safe for consumption.
+*/
