@@ -1,0 +1,87 @@
+
+
+//                                    YouTUbe/@geemap
+Map.centerObject(roi,12)
+var roi = 
+    /* color: #d63000 */
+    /* shown: false */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[104.53342405632577, -2.7673372957724616],
+          [104.53342405632577, -3.230872635316042],
+          [104.9962231285914, -3.230872635316042],
+          [104.9962231285914, -2.7673372957724616]]], null, false),
+    l8 = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2");  
+    
+    
+// Function to cloud mask and generate MNDWI 
+function preprocess(image){
+  var qa = image.select('QA_PIXEL');
+  var dilated = 1 << 1;
+  var cirrus = 1 << 2;
+  var cloud = 1 << 3;
+  var shadow = 1 << 4;
+  var mask = qa.bitwiseAnd(dilated).eq(0)
+    .and(qa.bitwiseAnd(cirrus).eq(0))
+    .and(qa.bitwiseAnd(cloud).eq(0))
+    .and(qa.bitwiseAnd(shadow).eq(0));
+  
+  // Cloudfree image
+  var masked = image.select(['SR_B.*'], ['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7'])
+    .updateMask(mask)
+    .multiply(0.0000275)
+    .add(-0.2);
+  
+  // Band map
+  var bandMap = { 
+    GREEN: masked.select('B3'),
+    SWIR1: masked.select('B6') 
+  };
+  
+  // Generate MNDWI
+  var mndwi = masked.expression('(GREEN - SWIR1) / (GREEN + SWIR1)', bandMap)
+    .rename('MNDWI');
+  
+  // Return the MNDWI and cloudmasked image
+  return image.select([]).addBands([masked, mndwi]);
+}
+
+// Filter collection and create MNDWI
+var col = l8.filterBounds(roi).filterDate('2020-01-01', '2022-12-31').map(preprocess);
+
+// Vis
+var vis = { min: -1, max: 1, palette: ['red', 'white', 'blue'] };
+
+// Median composite
+var median = col.median().clip(roi);
+Map.addLayer(median, { min: [0.1, 0.05, 0], max: [0.4, 0.3, 0.15], bands: ['B5', 'B6', 'B4'] }, 'Median Image');
+Map.addLayer(median.select('MNDWI'), vis, 'Median MNDWI');
+
+// Permanent water or river
+var permanent = median.select('MNDWI').gt(0.4);
+Map.addLayer(permanent.selfMask(), { palette: 'blue' }, 'Permanent water or River');
+
+// Maximum composite
+var max = col.reduce(ee.Reducer.percentile([98])).select('MNDWI_p98').clip(roi);
+Map.addLayer(max, vis, 'Max MNDWI');
+
+// Wetland
+var wetland = max.gt(0).and(permanent.eq(0));
+Map.addLayer(wetland.selfMask(), { palette: 'teal' }, 'Wetland');
+
+// Create legend to show the coastline year
+var panel = ui.Panel([ui.Label('Legend')], ui.Panel.Layout.flow('vertical'), { position: 'bottom-left' });
+[ { name: 'River', palette: 'blue' }, { name: 'Wetland', palette: 'teal' } ].map(function(dict, index){
+  panel.add(ui.Panel(
+    [
+      ui.Label('', { width: '30px', height: '15px', backgroundColor: dict.palette, border: '0.5px solid grey' }),
+      ui.Label(dict.name, { height: '15px' })
+    ], 
+    ui.Panel.Layout.flow('horizontal')
+  ));
+});
+Map.add(panel);
