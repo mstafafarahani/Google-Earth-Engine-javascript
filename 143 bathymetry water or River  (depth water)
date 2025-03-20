@@ -1,0 +1,143 @@
+/*
+                    Youtube.com/@geemap
+*/
+
+
+
+
+var s2 = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED"),
+    geometry = 
+    /* color: #d63000 */
+    /* shown: false */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[115.17451147579632, -8.497976537772326],
+          [115.17451147579632, -8.877406667466273],
+          [115.70116858028851, -8.877406667466273],
+          [115.70116858028851, -8.497976537772326]]], null, false),
+    srtm = ee.Image("USGS/SRTMGL1_003"),
+    etopo = ee.Image("NOAA/NGDC/ETOPO1");
+
+
+
+
+
+
+
+
+
+Map.centerObject(geometry,9)
+// Cloud masking function
+function cloudMask(image){
+  var scl = image.select('SCL');
+  var mask = scl.eq(3).or(scl.gte(7).and(scl.lte(10))).eq(0);
+  return image.select(['B.*']).divide(10000).updateMask(mask);
+}
+
+// Composite S2 image
+var image = s2.filterDate('2022-01-01', '2022-12-31')
+  .filterBounds(geometry)
+  .map(cloudMask)
+  .median()
+  .clip(geometry);
+
+// Calculate Normalized Difference Water Index (NDWI)
+var ndwi = image.expression('(GREEN - NIR) / (GREEN + NIR)', {
+  GREEN: image.select('B3'),
+  NIR: image.select('B8')
+});
+
+// Image masked with water only
+var waterImage = image.updateMask(ndwi.gt(0.1));
+Map.addLayer(waterImage, { min: 0, max: 0.2, bands: ['B4', 'B3', 'B2']}, 'Water image');
+
+// Sunglint correction
+var sunglintCorrection = waterImage.select(['B4', 'B3', 'B2']).subtract(image.select('B8'));
+Map.addLayer(sunglintCorrection, { min: 0, max: 0.2, bands: ['B4', 'B3', 'B2']}, 'Sun glint correction');
+
+// Below surface reflectance
+var below = sunglintCorrection.divide(sunglintCorrection.multiply(1.7).add(0.52));
+Map.addLayer(below, { min: 0, max: 0.2, bands: ['B4', 'B3', 'B2']}, 'Below surface reflectance');
+
+// Calculate depth
+var depth = ee.Image().expression('(m0 * (log(1000 * blue) / log(1000 * green))) - m1', {
+  m0: ee.Number(52.073).multiply(ee.Number(2.71).pow(0.957 * 0.5)),
+  m1: ee.Number(50.156).multiply(ee.Number(2.71).pow(0.957 * 0.5)),
+  blue: below.select('B2'),
+  green: below.select('B3')
+}).multiply(-1);
+
+// Visualization parameter
+var vis = {min: -40, max: 0, palette: ['purple', 'blue', 'cyan', 'green', 'yellow', 'orange', 'red']};
+
+// Show the result
+Map.addLayer(depth, vis, 'Depth');
+
+// Show the ETOPO bathymetry as comparison
+var etopoBathymetry = etopo.select('bedrock').clip(geometry);
+Map.addLayer(etopoBathymetry, vis, 'ETOPO', false);
+
+// Add legend
+Map.add(legendGradient('Depth', vis, 'bottom-left'));
+
+// Function to create gradient legend
+function legendGradient(title, visual, position) {
+  // set position of panel
+  var legend = ui.Panel({
+    layout: ui.Panel.Layout.flow('vertical', true),
+    style: {
+      position: position,
+      stretch: 'horizontal',
+      maxWidth: '100px',
+    }
+  });
+   
+  // Create legend title
+  var legendTitle = ui.Label({
+    value: title,
+    style: {
+    fontWeight: 'bold',
+    fontSize: '15px',
+    textAlign: 'center',
+    stretch: 'horizontal'
+    }
+  });
+   
+  // Add the title to the panel
+  legend.add(legendTitle);
+   
+  // create the legend image
+  var lon = ee.Image.pixelLonLat().select('latitude');
+  var gradient = lon.multiply((visual.max-visual.min)/100.0).add(visual.min);
+  var legendImage = gradient.visualize(visual);
+   
+  // create text on top of legend
+  var max = ui.Label({
+    value: visual.max,
+    style: {textAlign: 'center', stretch: 'horizontal'}
+  });
+  legend.add(max);
+   
+  // create thumbnail from the image
+  var thumbnail = ui.Thumbnail({
+    image: legendImage,
+    params: {bbox:'0,0,10,100', dimensions:'10x50'},
+    style: {textAlign: 'center', stretch: 'horizontal', height: '150px'}
+  });
+   
+  // add the thumbnail to the legend
+  legend.add(thumbnail);
+   
+  // create text on bottom of legend
+  var min = ui.Label({
+    value: visual.min,
+    style: {textAlign: 'center', stretch: 'horizontal'}
+  });
+  legend.add(min);
+   
+  return legend;
+}
