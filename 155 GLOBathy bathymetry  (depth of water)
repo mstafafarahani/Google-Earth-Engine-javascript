@@ -1,0 +1,124 @@
+/*Google Earth Engine Bathymetry Mapping Tutorial For Beginners
+
+ 
+Dataset Availability
+GLOBathy Global lakes bathymetry dataset 
+2022-01-26T00:00:00Z–2022-01-26T23:59:00Z
+
+
+
+
+Steps
+
+1. Copy code in my Channel Description
+
+2.Caspian Sea Region:
+
+
+
+The geometry for the Caspian Sea is defined using a Polygon with coordinates that roughly enclose the area of the Caspian Sea. 
+You can adjust the coordinates if necessary for a more precise boundary.
+
+
+3.Bathymetry Data:
+
+
+The bathymetry data (globathy) is clipped to the Caspian Sea region using the clip() function.
+Classification into 10 Classes:
+
+The bathymetry values are 
+divided into 10 depth classes between 1 and 700 meters, similar to the previous versions.
+
+
+4.Map Centering:
+
+
+
+The map is centered on the Caspian Sea's approximate latitude and longitude (51.0, 41.0) with a zoom level of 6 to focus on the sea.
+
+
+5.Legend:
+
+
+
+A custom legend is created to show the 10 depth classes and their associated color ranges.
+This code will classify the bathymetry of the Caspian Sea into 
+10 depth classes and display the corresponding legend.
+
+
+code----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+*/
+
+//youtube.com/@geemap
+// Load GLOBathy bathymetry dataset
+var globathy = ee.Image("projects/sat-io/open-datasets/GLOBathy/GLOBathy_bathymetry");
+
+// Define the geometry for the Caspian Sea using a bounding box
+var caspianSea = ee.Geometry.Polygon([
+  [[46.0, 47.0], [55.0, 47.0], [55.0, 36.0], [46.0, 36.0]]
+]);
+
+// Clip the bathymetry data to the Caspian Sea region
+var clippedGlobathy = globathy.clip(caspianSea);
+
+// Define 10 classes for classification
+var thresholds = ee.List.sequence(1, 700, 70); // Create 10 classes between 1 and 700 meters depth
+var classified = clippedGlobathy.gt(ee.Image.constant(thresholds.get(0)))
+  .add(clippedGlobathy.gt(ee.Image.constant(thresholds.get(1))))
+  .add(clippedGlobathy.gt(ee.Image.constant(thresholds.get(2))))
+  .add(clippedGlobathy.gt(ee.Image.constant(thresholds.get(3))))
+  .add(clippedGlobathy.gt(ee.Image.constant(thresholds.get(4))))
+  .add(clippedGlobathy.gt(ee.Image.constant(thresholds.get(5))))
+  .add(clippedGlobathy.gt(ee.Image.constant(thresholds.get(6))))
+  .add(clippedGlobathy.gt(ee.Image.constant(thresholds.get(7))))
+  .add(clippedGlobathy.gt(ee.Image.constant(thresholds.get(8))))
+  .add(clippedGlobathy.gt(ee.Image.constant(thresholds.get(9))));
+
+// Define a color palette for the 10 classes
+var palette = [
+  '#0000ff', '#0033cc', '#0066ff', '#0099ff', '#00ccff', 
+  '#00ffff', '#66ffcc', '#66ff66', '#99ff33', '#ccff00'
+];
+
+// Visualization parameters for classified image
+var visParams = {
+  min: 0,
+  max: 9,
+  palette: palette
+};
+
+// Add the classified layer to the map
+Map.addLayer(classified, visParams, "Classified Bathymetry (10 classes)");
+
+// Set the map center to focus on the Caspian Sea region
+Map.setCenter(51.0, 41.0, 6); // Centering on Caspian Sea's approximate latitude and longitude
+
+// Create a function to add a legend
+function addLegend(map) {
+  var legend = ui.Panel({style: {position: 'bottom-left', padding: '8px 15px'}});
+  var title = ui.Label({
+    value: 'Legend: Bathymetry Classes (m)',
+    style: {fontWeight: 'bold', fontSize: '16px', margin: '0 0 4px 0'}
+  });
+  
+  // Labels for the 10 classes
+  var labels = [
+    '0 - 70 m', '70 - 140 m', '140 - 210 m', '210 - 280 m', '280 - 350 m',
+    '350 - 420 m', '420 - 490 m', '490 - 560 m', '560 - 630 m', '630 - 700 m'
+  ];
+  
+  palette.forEach(function(color, index) {
+    var colorBox = ui.Label('', {backgroundColor: color, padding: '8px', margin: '0 0 4px 0'});
+    var description = ui.Label(labels[index], {margin: '0 0 4px 6px'});
+    var panelItem = ui.Panel([colorBox, description], ui.Panel.Layout.Flow('horizontal'));
+    legend.add(panelItem);
+  });
+  
+  legend.add(title);
+  map.add(legend);
+}
+
+// Add the legend to the map
+addLegend(Map);
+
+//----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
