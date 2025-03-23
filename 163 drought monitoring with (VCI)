@@ -1,0 +1,73 @@
+//                    YOUTUBE.com/@geemap
+var VCIviz = {"opacity":1,"bands":["VCI"],"min":0.003964086528867483,"max":0.7320513129234314,"palette":["ff3510","ebff10","20ff18","1afff2","1629ff"]};
+
+var aoi = ee.FeatureCollection("users/sukkiisukant/bundelkhand_districts");
+Map.centerObject(aoi)
+ 
+//MODIS NDVI data
+var dataset = ee.ImageCollection('MODIS/006/MOD13Q1')
+            .select('NDVI');
+
+print (dataset.size(), "Total number of NDVI Images")  
+
+// MODIS NDVI values come as NDVI x 10000 that need to be scaled by 0.0001
+var modisScaled = dataset.map(function(image) {
+  var scaled = image.divide(10000)
+  return scaled.copyProperties(image, ['system:index', 'system:time_start'])
+});
+
+
+// Year & Month for which we require VCI
+
+var year = 2007
+var month = 1;
+
+//Max and Min NDVI for all years but for selected month 
+var ndvi = modisScaled.filter(ee.Filter.calendarRange(month,month,'month'));
+print (ndvi, "For specific month")
+
+//Map.addLayer (ndvi)
+
+var ndvi_max = ndvi.max().clip(aoi);
+var ndvi_min = ndvi.min().clip(aoi);
+
+Map.addLayer(ndvi_max, {}, 'NDVI_max', 0);
+Map.addLayer(ndvi_min, {}, 'NDVI_min', 0);
+
+//ndviT is the current NDVI (for a giver month & year)
+var ndviT = modisScaled.filter(ee.Filter.calendarRange(year,year,'year'))
+    .filter(ee.Filter.calendarRange(month,month,'month'))
+    .median()
+    .clip(aoi);
+    
+Map.addLayer(ndviT, {}, 'NDVIT', 0);
+
+// Final calculation of VCI for specified month & year
+var VCI = ndviT.subtract(ndvi_min).divide(ndvi_max.subtract(ndvi_min)).rename('VCI');
+
+print (VCI, "VCI for current date")
+Map.addLayer(VCI, VCIviz, 'VCI', 1);
+
+
+
+/////////////////////////////////////////
+//All VCI at once
+////////////////////////////////////////
+
+var VCIfunc = function(img){
+    img = img.clip(aoi)
+    var date = ee.Date(img.get('system:time_start'));
+    var month = date.get('month');
+    var dataset2 = modisScaled.filter(ee.Filter.calendarRange(month,month,'month'));
+    var NDVImin =  dataset2.min();
+    var NDVImax =  dataset2.max();
+    var VCI = img.subtract(NDVImin).divide(NDVImax.subtract(NDVImin)).rename('VCI')
+                  .copyProperties(img, ['system:time_start']);
+    return VCI    
+  }
+  
+var modVCI = modisScaled.map(VCIfunc)
+
+print (modVCI, "VCI Image collection")
+Map.addLayer (modVCI, VCIviz, 'VCI_IC', 1)
+
