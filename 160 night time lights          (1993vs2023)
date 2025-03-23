@@ -1,0 +1,87 @@
+//                 YouTube.com/@geemap
+
+
+
+var geometry = /* color: #0b4a8b */ee.Geometry.Point([53.78754465371014, 33.10622364079836]);
+
+
+Map.centerObject(geometry, 8);
+var border     =  ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry)
+var geometry = border.geometry();
+Map.addLayer(geometry, {color: 'green'}, 'Study Area');
+print('Total Area مساحت ناحیه مورد مطالعه (km2)', geometry.area().divide(1000000))//Calculate  Area in Square Kilometers (Km2)
+
+
+
+
+// 04 Tutorials: Getting Started with Basics of Javascript in Google Earth Engine
+// Create a composite image from different satellite images representing nighttime lights in various years using addBands()
+// 1. Global nighttime lights datasets
+/*
+This code demonstrates the use of a dataset showing stable nighttime lights globally.
+The image loaded is for 1993, and only the 'stable_lights' band is visualized,
+representing artificial lighting across the world at night. 
+This is useful for urban studies or understanding human settlements globally.
+*/
+
+// a. Load a global image of nighttime lights for the year 1993
+var lights93 = ee.Image('NOAA/DMSP-OLS/NIGHTTIME_LIGHTS/F101993').clip(border)
+// b. Print the image metadata to the Console to view its properties
+print('Nighttime lights', lights93);
+// c. Add the stable nighttime lights band to the map layer with a specified display range
+Map.addLayer(lights93, {bands: ['stable_lights'], min: 0, max: 63}, 'Nighttime 1993'); 
+
+
+// 2. RGB Composites of  Global nighttime lights
+/*
+This code visualizes changes in artificial lighting over time using nighttime lights data from 1993, 2003, and 2013. 
+By combining these years into a three-band RGB image, differences can be highlighted: red represents 2013, green represents 2003, and blue represents 1993. 
+This method helps in studying temporal changes in urbanization or economic activities across the globe.
+*/
+// a. Load images for three different years (1993, 2003, 2013)
+// stable_lights band, which contains data on stable, long-term lights from human settlements.
+var lights03 = ee.Image('NOAA/DMSP-OLS/NIGHTTIME_LIGHTS/F152003').select('stable_lights').rename('2003');
+var lights13 = ee.Image('NOAA/DMSP-OLS/NIGHTTIME_LIGHTS/F182013').select('stable_lights').rename('2013');
+// These variables store nighttime lights satellite images for the years 2003 and 2013, respectively.
+
+
+// b. Create a composite image that compares stable lights across 1993, 2003, and 2013
+var changeImage = lights13.addBands(lights03)
+                          .addBands(lights93.select('stable_lights').rename('1993'));
+                          
+// addBands(): This method is used to combine different images into one multi-band image. 
+// Each band in the final image represents nighttime lights data for a specific year.
+
+// c. Print the composite metadata
+print('Change image', changeImage);
+// d. Add the composite as an RGB layer
+Map.addLayer(changeImage, {min: 0, max: 63}, 'Change composite 2023');
+
+
+// In this case, we are comparing nighttime light intensity across three different years (1993, 2003, and 2013). 
+// By combining them into a single image, we can easily analyze changes over time.
+
+
+// 3. Visualizations of natural-color and near-infrared false-color composite of Landsat image
+/*
+This code creates two different visualizations of the same Landsat image. 
+The natural-color composite uses the red, green, and blue bands (SR_B3, SR_B2, SR_B1) to produce an image that resembles what humans would see. 
+In contrast, the false-color composite (near-infrared) swaps one of the bands with near-infrared data (SR_B4) to highlight different 
+environmental features like vegetation health, which might not be visible to the naked eye.
+*/
+// // a. Import an image from Landsat 5 dataset
+// var image = ee.Image('LANDSAT/LT05/C02/T1_L2/LT05_022039_20050907');
+
+// // b. Create a natural-color composite
+// Map.addLayer(image, 
+//   {bands: ['SR_B3', 'SR_B2', 'SR_B1'], min: 8000, max: 17000}, 
+//   'Natural Color'
+// );
+
+// // c. Create a near-infrared false-color composite
+// Map.addLayer(image, 
+//   {bands: ['SR_B4', 'SR_B3', 'SR_B2'], min: 8000, max: 17000}, 
+//   'False Color'
+// );
+// // Map.centerObject(image, 7);
+
