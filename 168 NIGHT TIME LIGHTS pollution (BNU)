@@ -1,0 +1,14 @@
+//            YOUTUBE.com/@geeMAP
+
+var geometry = 
+    /* color: #00ffff */
+    /* shown: false */
+    ee.Geometry.Point([51.49673250620952, 35.81485990675249]);
+Map.centerObject(geometry,8)
+var scale = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry)
+Map.addLayer(scale) //1992-01-01    2014-01-01
+var index = ee.ImageCollection("BNU/FGS/CCNL/v1").select('b1').filterBounds(scale).filterDate('2010-01-01', '2010-12-31')
+var index = index.map(function(img){
+  return img.clip(scale)})
+print(index.size())
+Map.addLayer(index.mean(),{min:3,max:60},'Nighttime Lights')
