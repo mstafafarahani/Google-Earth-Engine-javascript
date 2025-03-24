@@ -1,0 +1,30 @@
+//                  YOUTUBE.com/@geemap
+
+
+
+// Import and View the NOAA-DMSP OLS Nighttime Lights Time Series
+
+// 1. Import the DMSP OLS Nighttime data
+var dataset = ee.ImageCollection("NOAA/DMSP-OLS/NIGHTTIME_LIGHTS")
+              .select('stable_lights')
+              .map(function(img){
+                return img.set('year', ee.Image(img).date().get('year'))
+              })
+              
+// 2. Select the year              
+var years = [1992, 2000, 2008, 2013]
+
+for(var a = 0; a < 4; a++){
+  var filter = dataset.filterMetadata('year', 'equals', years[a])
+
+// 3. Set visualization parameters  
+  var style = {
+    bands: ['stable_lights'],
+    max: 63,
+    palette: ['black', 'white', 'orange', 'yellow', 'red']
+  }
+  
+// 4. Add layers  
+  Map.addLayer(filter, style, 'NOAA - YEAR:' + ' ' + years[a])
+  
+} 
