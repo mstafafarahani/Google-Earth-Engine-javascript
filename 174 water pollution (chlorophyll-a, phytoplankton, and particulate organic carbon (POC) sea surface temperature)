@@ -1,0 +1,199 @@
+
+//                          YOUTUBE.com/@geemap
+
+
+
+// Spatial and Temporal Analysis of Water Chlorophyll Concentration Using MODIS Data in Google Earth Engine: Gulf of California Case Study
+// Mapping chlorophyll-a, phytoplankton, and particulate organic carbon (POC) concentrations, 
+// as well as to analyze sea surface temperature (SST) using MODIS Ocean Terra data in Google Earth Engine (GEE). 
+// The area of interest is the coastal region of California.
+
+// 1. Define the region of interest (ROI) using a set of coordinates
+var coordinates = [
+  [-117.65667775268909, 32.05608433691247],
+  [-117.65667775268909, 21.362595046706904],
+  [-104.38519337768909, 21.362595046706904],
+  [-104.38519337768909, 32.05608433691247]
+];
+
+var studyArea = ee.Geometry.Polygon(coordinates);
+Map.addLayer(studyArea, {}, 'study area', false);
+Map.centerObject(studyArea, 6);
+
+// 2. Load the MODIS Ocean data
+var modisCollection = ee.ImageCollection("NASA/OCEANDATA/MODIS-Terra/L3SMI")
+  .filterDate('2020-01-01', '2022-12-31');
+
+// 3. Map the chlorophyll-a concentration
+var chlorophyll = modisCollection.mean().select('chlor_a');
+Map.addLayer(chlorophyll.clip(studyArea), {palette: ['blue', 'green', 'yellow', 'orange', 'red']}, 'Chlorophyll-a', false);
+
+//- chlorophyll: Computes the mean chlorophyll-a concentration over the filtered period.
+
+// 4. Map the phytoplankton concentration (Normalized Fluorescence Line Height)
+var phytoplankton = modisCollection.mean().select('nflh');
+Map.addLayer(phytoplankton.clip(studyArea), {palette: ['blue', 'green', 'yellow', 'orange', 'red']}, 'Phytoplankton', false);
+/*
+- `phytoplankton`: Computes the mean phytoplankton concentration over the filtered period.
+*/
+
+// 5. Map the particulate organic carbon (POC)
+var poc = modisCollection.mean().select('poc');
+var visParams2 = {
+  "opacity": 1,
+  "bands": ["poc", "poc", "poc"],
+  "min": 187.1,
+  "max": 1417.3,
+  "gamma": 1
+};
+
+Map.addLayer(poc.clip(studyArea), visParams2, "POC", false);
+/*
+- `poc`: Computes the mean particulate organic carbon (POC) over the filtered period.
+*/
+
+// Perform Time-Series Analysis Using Sea Surface Temperature (SST) band from MODIS dataset
+
+// 6. Stack raster layers of sea surface temperature (SST) for each January
+var sstCollection = modisCollection.select('sst')
+  .filter(ee.Filter.calendarRange(1, 1, 'month'));
+print(sstCollection);
+
+var sstStack = sstCollection.toBands();
+Map.addLayer(sstStack.clip(studyArea), [], 'SST Stack', false);
+print(sstStack);
+/*
+- `sstCollection`: Filters the MODIS collection for sea surface temperature (SST) data for each January.
+- `sstStack`: Stacks the SST images into a single multi-band image.
+*/
+
+// 7. Export the phytoplankton, SST stack, chlorophyll and poc to Google Drive
+Export.image.toDrive({
+  image: phytoplankton.clip(studyArea),
+  description: 'phytoplankton_MODIS',
+  scale: 5000,
+  region: studyArea,
+  crs: 'EPSG:4326',
+  maxPixels: 1e13,
+  folder: 'phytoplankton_Export'
+});
+
+Export.image.toDrive({
+  image: chlorophyll.clip(studyArea),
+  description: 'chlorophyll_MODIS',
+  scale: 5000,
+  region: studyArea,
+  crs: 'EPSG:4326',
+  maxPixels: 1e13,
+  folder: 'chlorophyll_Export'
+});
+
+Export.image.toDrive({
+  image: sstStack.clip(studyArea),
+  description: 'SST_MODIS',
+  scale: 5000,
+  region: studyArea,
+  crs: 'EPSG:4326',
+  maxPixels: 1e13,
+  folder: 'SST_Export'
+});
+Export.image.toDrive({
+  image: poc.clip(studyArea),
+  description: 'poc_MODIS',
+  scale: 5000,
+  region: studyArea,
+  crs: 'EPSG:4326',
+  maxPixels: 1e13,
+  folder: 'poc_Export'
+});
+/*
+- Export.image.toDrive: Exports the SST stack image to Google Drive.
+- `image`: The image to export, clipped to the ROI.
+- `description`: A description for the export.
+- `scale`: The pixel resolution in meters.
+- `region`: The ROI.
+- `crs`: The coordinate reference system.
+- `maxPixels`: The maximum number of pixels to export.
+- `folder`: The folder in Google Drive where the export will be saved.
+*/
+
+// 8. Create a temporal collection function to aggregate images over time
+/*
+collection: An ee.ImageCollection to be aggregated.
+startDate: The starting date for the aggregation, as a string (e.g., '2020-01-01').
+numPeriods: The number of temporal periods to create.
+interval: The length of each temporal period.
+timeUnit: The unit of time for the interval (e.g., 'day', 'month', 'year').
+*/
+function createTemporalCollection(collection, startDate, numPeriods, interval, timeUnit) {
+var sequence = ee.List.sequence(0, ee.Number(numPeriods).subtract(1));
+//sequence: An ee.List of numbers from 0 to numPeriods - 1. This list represents the indices of the temporal periods.
+var origin = ee.Date(startDate);
+// origin: An ee.Date  object representing the starting date.
+return ee.ImageCollection(sequence.map(function(i) {
+// The sequence.map function iterates over each index i in the sequence
+
+var start = origin.advance(ee.Number(interval).multiply(i), timeUnit);
+var end = origin.advance(ee.Number(interval).multiply(ee.Number(i).add(1)), timeUnit);
+/*
+start: The start date of the current period, calculated by advancing the origin by interval * i.
+end: The end date of the current period, calculated by advancing the origin by interval * (i + 1).
+*/
+
+return collection.filterDate(start, end).mean()
+    .set('system:time_start', start.millis())
+    .set('system:time_end', end.millis());
+/*
+The collection.filterDate(start, end) function filters the image collection to include only images within the current temporal period.
+The mean() function calculates the mean of the images within the period.
+The set functions add properties to the resulting image, storing the start and end times as metadata.
+*/    
+  }));
+}
+
+// This function is a powerful tool for temporal analysis in Google Earth Engine, 
+// allowing users to aggregate image data over specified time intervals easily.
+
+
+// 9. Create a weekly temporal collection from the MODIS data
+var weeklyCollection = createTemporalCollection(modisCollection, '2020-01-01', 104, 1, 'week');
+print(weeklyCollection);
+
+// 10. Plot a time series of chlorophyll-a, SST, and POC
+print(ui.Chart.image.series(weeklyCollection.select('chlor_a'), studyArea, ee.Reducer.mean(), 5000, 'system:time_start'));
+print(ui.Chart.image.series(weeklyCollection.select('sst'), studyArea, ee.Reducer.mean(), 5000, 'system:time_start'));
+print(ui.Chart.image.series(weeklyCollection.select('poc'), studyArea, ee.Reducer.mean(), 5000, 'system:time_start'));
+/*
+- `weeklyCollection`: Creates a weekly temporal collection from the MODIS data.
+- `ui.Chart.image.series`: Creates a time series chart for the selected band (chlorophyll-a, SST, or POC).
+- `select('chlor_a')`: Selects the chlorophyll-a band.
+- `select('sst')`: Selects the SST band.
+- `select('poc')`: Selects the POC band.
+- `studyArea`: The ROI.
+- `ee.Reducer.mean()`: Computes the mean value for each time period.
+- `5000`: The spatial resolution in meters.
+- `system:time_start`: The time property for the x-axis.
+*/
+
+// 11. Calculate and print the area of Chlorophyll-a, Phytoplankton, and poc
+function calculateArea(image, threshold, bandName) {
+  var masked = image.updateMask(image.gt(threshold));
+  var areaImage = masked.multiply(ee.Image.pixelArea()).divide(1e6); // Convert to sq km
+  var area = areaImage.reduceRegion({
+    reducer: ee.Reducer.sum(),
+    geometry: studyArea,
+    scale: 5000,
+    maxPixels: 1e13
+  });
+  print(bandName + ' Area (sq km): ', area.get(bandName));
+}
+
+// Set thresholds for area calculation
+var chlThreshold = 0.1;
+var phytoThreshold = 0.1;
+var pocThreshold = 0.1;
+
+// Calculate and print areas
+calculateArea(chlorophyll, chlThreshold, 'chlor_a');
+calculateArea(phytoplankton, phytoThreshold, 'nflh');
+calculateArea(poc, pocThreshold, 'poc');
