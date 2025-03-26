@@ -1,0 +1,133 @@
+
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com
+var Particulate_organic_carbon = ee.ImageCollection("NASA/OCEANDATA/MODIS-Terra/L3SMI").select('poc').filterBounds(geometry)
+.filterDate('2020-01-01','2021-12-20')
+var Particulate_organic_carbon = Particulate_organic_carbon.map(function(img){ //2000-02-24–2022-02-28
+  return img.clip(geometry).multiply(1).subtract(0).add(0).copyProperties(img, ['system:time_start'])})
+print(Particulate_organic_carbon.size())
+Map.addLayer(Particulate_organic_carbon.mean(),{min:94363.03125,max:100628.34375 
+,palette:['#00007f', '#0000ff', '#007fff', '#00ffff', '#7fff7f', '#ffff00', '#ff7f00', '#ff0000', '#7f0000']},'  Particulate_organic_carbon    ')
+
+// Create a time series chart showing Particulate_organic_carbon growth
+print(ui.Chart.image.series({
+  imageCollection: Particulate_organic_carbon,
+  region: geometry,
+  reducer: ee.Reducer.mean(),
+  scale: 4616 ,
+  xProperty: 'system:time_start'
+}).setSeriesNames(['Particulate_organic_carbon  Growth mg/m^3']).setOptions({
+  title: 'Particulate_organic_carbon Growth',
+  hAxis: {title: 'Year'},
+  vAxis: {title: 'mg/m^3)'},
+  interpolateNulls: true,
+  lineWidth: 1,
+  pointSize: 2,
+  curveType: 'function'
+}));
+
+
+
+
+
+
+
+
+//-------------------------------------------------------------------------------------------------------
+var phytoplancton = ee.ImageCollection("NASA/OCEANDATA/MODIS-Terra/L3SMI").select('nflh').filterBounds(geometry)
+.filterDate('2020-01-01','2021-12-20')
+var phytoplancton = phytoplancton.map(function(img){ //2000-02-24–2022-02-28
+  return img.clip(geometry).multiply(1).subtract(0).add(0).copyProperties(img, ['system:time_start'])})
+print(phytoplancton.size())
+Map.addLayer(phytoplancton.mean(),{min:94363.03125,max:100628.34375 ,palette:['#00007f', '#0000ff', '#007fff', '#00ffff', '#7fff7f', '#ffff00', '#ff7f00', '#ff0000', '#7f0000']},'      phytoplancton    ')
+
+// Create a time series chart showing phytoplancton growth
+print(ui.Chart.image.series({
+  imageCollection: phytoplancton,
+  region: geometry,
+  reducer: ee.Reducer.mean(),
+  scale: 4616 ,
+  xProperty: 'system:time_start'
+}).setSeriesNames(['phytoplancton  Growth mg/m^3']).setOptions({
+  title: 'Particulate_organic_carbon Growth',
+  hAxis: {title: 'Year'},
+  vAxis: {title: 'mW cm-2 μm-1 sr-1)'},
+  interpolateNulls: true,
+  lineWidth: 1,
+  pointSize: 2,
+  curveType: 'function'
+}));
+
+
+
+
+
+
+
+
+
+
+
+
+
+//------------------------------------------------------------------------------------------------------------------------------
+var Chlorophyllconcentration = ee.ImageCollection("NASA/OCEANDATA/MODIS-Terra/L3SMI").select('chlor_a').filterBounds(geometry)
+.filterDate('2020-01-01','2021-12-20')
+var Chlorophyllconcentration = Chlorophyllconcentration.map(function(img){ //2000-02-24–2022-02-28
+  return img.clip(geometry).multiply(1).subtract(0).add(0).copyProperties(img, ['system:time_start'])})
+print(Chlorophyllconcentration.size())
+Map.addLayer(Chlorophyllconcentration.mean(),{min:94363.03125,max:100628.34375 ,palette:['#00007f', '#0000ff', '#007fff', '#00ffff', '#7fff7f', '#ffff00', '#ff7f00', '#ff0000', '#7f0000']},'      Chlorophyllconcentration    ')
+
+// Create a time series chart showing Chlorophyllconcentration growth
+print(ui.Chart.image.series({
+  imageCollection: Chlorophyllconcentration,
+  region: geometry,
+  reducer: ee.Reducer.mean(),
+  scale: 4616 ,
+  xProperty: 'system:time_start'
+}).setSeriesNames(['Chlorophyllconcentration  Growth mg/m^3']).setOptions({
+  title: 'Particulate_organic_carbon Growth',
+  hAxis: {title: 'Year'},
+  vAxis: {title: '(mg/m^3)'},
+  interpolateNulls: true,
+  lineWidth: 1,
+  pointSize: 2,
+  curveType: 'function'
+}));
+
+
+
+//--------------------------------------------------------------------------------------------------------------------------
+var Seasurfacetemperature = ee.ImageCollection("NASA/OCEANDATA/MODIS-Terra/L3SMI").select('sst').filterBounds(geometry)
+.filterDate('2020-01-01','2021-12-20')
+var Seasurfacetemperature = Seasurfacetemperature.map(function(img){ //2000-02-24–2022-02-28
+  return img.clip(geometry).multiply(1).subtract(0).add(0).copyProperties(img, ['system:time_start'])})
+print(Seasurfacetemperature.size())
+Map.addLayer(Seasurfacetemperature.mean(),{min:94363.03125,max:100628.34375 ,palette:['#00007f', '#0000ff', '#007fff', '#00ffff', '#7fff7f', '#ffff00', '#ff7f00', '#ff0000', '#7f0000']},'      Seasurfacetemperature    ')
+
+// Create a time series chart showing Seasurfacetemperature growth
+print(ui.Chart.image.series({
+  imageCollection: Seasurfacetemperature,
+  region: geometry,
+  reducer: ee.Reducer.mean(),
+  scale: 4616 ,
+  xProperty: 'system:time_start'
+}).setSeriesNames(['Seasurfacetemperature  Growth °C']).setOptions({
+  title: 'Seasurfacetemperature Growth',
+  hAxis: {title: 'Year'},
+  vAxis: {title: '(°C)'},
+  interpolateNulls: true,
+  lineWidth: 1,
+  pointSize: 2,
+  curveType: 'function'
+}));
+
+
+
+
+
+
+
+
+
+
+
