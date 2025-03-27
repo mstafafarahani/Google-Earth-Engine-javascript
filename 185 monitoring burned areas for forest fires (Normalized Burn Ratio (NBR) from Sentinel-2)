@@ -1,0 +1,68 @@
+/*Google Earth Engine Forest Fire Mapping With  Sentinel-2 Data 
+Google Earth Engine (GEE) is a powerful platform for geospatial data analysis, particularly for monitoring forest fires. Below is an example of a script that detects 
+burned areas (a proxy for forest fires) using the Normalized Burn Ratio (NBR) from Sentinel-2 imagery.
+Steps:
+1. Copy code in my Channel Description
+2. AOI: The area of interest is defined as a rectangular geometry.
+3.NBR Calculation: NBR is calculated using the formula (NIR - SWIR) / (NIR + SWIR),
+    where NIR is the near-infrared band (B8) and SWIR is the shortwave infrared band (B12).
+4.dNBR: The difference between pre-fire and post-fire NBR values (dNBR) indicates the severity of the burn. 
+   Higher positive values indicate more severe burns.
+5.Thresholding: A threshold of 0.3 is applied to classify burned areas, but this value can be adjusted based on the study area and specific conditions.
+6.Visualization: Burned areas are visualized in red, and the dNBR is shown with a color gradient.
+Code----------------------------------------------------------------------------
+*/
+// Define the area of interest (AOI)
+var aoi = ee.Geometry.Rectangle([102.6, 14.6, 103.0, 15.0]);
+
+// Define dates for pre-fire and post-fire
+var preFireDate = ee.Date('2023-03-01');
+var postFireDate = ee.Date('2023-05-01');
+
+// Load Sentinel-2 surface reflectance data
+var s2 = ee.ImageCollection('COPERNICUS/S2_SR')
+  .filterBounds(aoi)
+  .filterDate('2023-01-01', '2023-06-01')
+  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20));
+
+// Select the image closest to the pre-fire and post-fire dates
+var preFire = s2.filterDate(preFireDate, preFireDate.advance(1, 'month')).median().clip(aoi);
+var postFire = s2.filterDate(postFireDate, postFireDate.advance(1, 'month')).median().clip(aoi);
+//
+// Calculate the NBR from YOUTUBE.com/@GEEmap
+var calcNBR = function(image) {
+  return image.normalizedDifference(['B8', 'B12']).rename('NBR');
+};
+
+var nbrPreFire = calcNBR(preFire);
+var nbrPostFire = calcNBR(postFire);
+
+// Calculate the difference in NBR (dNBR)
+var dNBR = nbrPreFire.subtract(nbrPostFire).rename('dNBR');
+
+// Threshold to classify burned areas
+var burnedArea = dNBR.gt(0.3);
+
+// Visualization parameters
+var dNBRVis = {min: -1,max: 1,palette: ['white', 'black', 'yellow', 'orange', 'red']}
+var burnedAreaVis = {min: 0,max: 1,palette: ['white', 'red']}
+
+// Add layers to the map
+Map.centerObject(aoi, 10);
+Map.addLayer(dNBR, dNBRVis, 'dNBR');
+Map.addLayer(burnedArea.selfMask(), burnedAreaVis, 'Burned Area');
+
+// Print the area of burned region in square kilometers
+var area = burnedArea.multiply(ee.Image.pixelArea())
+  .reduceRegion({
+    reducer: ee.Reducer.sum(),
+    geometry: aoi,
+    scale: 30,
+    maxPixels: 1e9
+  });
+
+var areaSqKm = ee.Number(area.get('dNBR')).divide(1e6);
+print('Burned Area (sq km):', areaSqKm);
+
+
+//Code----------------------------------------------------------------------------
