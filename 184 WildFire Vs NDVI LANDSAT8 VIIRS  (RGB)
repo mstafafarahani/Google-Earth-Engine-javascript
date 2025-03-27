@@ -1,0 +1,193 @@
+
+
+
+//                YOUTUBE.com/@geemap
+
+
+// Wildfire Detection and Vegetation Change Mapping Using VIIRS and Landsat 8 Imagery in Google Earth Engine 
+var geometry = 
+    /* color: #98ff00 */
+    /* shown: false */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[-123.5819311038782, 39.7184198180836],
+          [-123.5819311038782, 38.825408336878915],
+          [-122.4393529788782, 38.825408336878915],
+          [-122.4393529788782, 39.7184198180836]]], null, false);
+// 1. Define coordinates for a point of interest
+var coords_wildfire = [-121.30739155546495,37.83353662375529];
+var wildfire_point = ee.Geometry.Point(coords_wildfire);
+
+// 2. Load administrative boundaries and filter to the region of interest
+var boundaries = ee.FeatureCollection("FAO/GAUL/2015/level1");
+Map.addLayer(boundaries, [], 'Countries boundaries', false);
+var region = boundaries.filterBounds(wildfire_point)
+  .map(function(feature) {
+    return feature.simplify(10000);
+  });
+
+// 3. Center the map on the region of interest and display boundaries
+Map.centerObject(region);
+Map.addLayer(region, {}, 'Region of Interest', false);
+
+// 4. Load VIIRS wildfire data, filter by date, and select bands
+var viirs_data = ee.ImageCollection("NASA/VIIRS/002/VNP09GA")
+  .select(['I1', 'I2'])
+  .filterDate('2017-10-08', '2017-10-10');
+  print(viirs_data)
+
+// 5. Add the VIIRS wildfire layer to the map
+Map.addLayer(viirs_data.toBands().clip(region), {}, 'VIIRS Wildfire', false);
+
+// 6. Define coordinates for an area to analyze vegetation change
+var coords_area = [
+  [-123.5819311038782, 39.7184198180836],
+  [-123.5819311038782, 38.825408336878915],
+  [-122.4393529788782, 38.825408336878915],
+  [-122.4393529788782, 39.7184198180836]
+];
+var vegetation_area = ee.Geometry.Polygon(coords_area);
+
+// 7. Center map on the new area
+Map.addLayer(vegetation_area, [], 'Study Area');
+Map.centerObject(vegetation_area, 8);
+
+// 8. Load Landsat data before the fire (2016-2017), filter by date, and select bands
+var landsat_before = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2")
+  .select(['SR_.*'])
+/*
+This is a regular expression that matches any sequence of characters that follows the prefix SR_. In regular expressions:
+. (dot) matches any single character.
+* means "zero or more occurrences" of the preceding character.
+In this case, SR_.* matches any band that starts with SR_ and is followed by any other characters.
+*/
+  .filterDate('2016-01-01', '2017-12-31')
+  .filter(ee.Filter.calendarRange(8, 10, 'month'))
+  .filterBounds(vegetation_area);
+
+// 9. Add the 'before fire' image to the map in RGB
+Map.addLayer(landsat_before.median().clip(vegetation_area),
+  {min: 8599, max: 18463, bands: ['SR_B5', 'SR_B4', 'SR_B3']}, 'Before Fire (RGB)', false);
+print(landsat_before.first(), 'before fire image');
+
+// 10. Load Landsat data after the fire (2018-2019), filter by date, and select bands
+var landsat_after = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2")
+  .select(['SR_.*'])
+  .filterDate('2018-01-01', '2019-12-31')
+  .filter(ee.Filter.calendarRange(8, 10, 'month'))
+  .filterBounds(vegetation_area);
+
+// 11. Add the 'after fire' image to the map in RGB
+Map.addLayer(landsat_after.median().clip(vegetation_area),
+  {min: 8599, max: 18463, bands: ['SR_B5', 'SR_B4', 'SR_B3']}, 'After Fire (RGB)', false);
+print(landsat_after.first(), 'after fire image');
+
+                     // Vegetation Change Mapping Using NDVI Indices //
+
+// 12. Calculate NDVI before the fire
+var ndvi_before_fire = landsat_before.map(function(img) {
+  var gain_band5 = ee.Number(img.get('REFLECTANCE_MULT_BAND_5'));
+  var offset_band4 = ee.Number(img.get('REFLECTANCE_ADD_BAND_3'));
+  var scaled_img = img.multiply(gain_band5).add(offset_band4);
+  return scaled_img.normalizedDifference(['SR_B5', 'SR_B4']).rename('ndvi_before');
+}).median();
+
+// 13. Calculate NDVI after the fire
+var ndvi_after_fire = landsat_after.map(function(img) {
+  var gain_band5 = ee.Number(img.get('REFLECTANCE_MULT_BAND_5'));
+  var offset_band4 = ee.Number(img.get('REFLECTANCE_ADD_BAND_3'));
+  var scaled_img = img.multiply(gain_band5).add(offset_band4);
+  return scaled_img.normalizedDifference(['SR_B5', 'SR_B4']).rename('ndvi_after');
+}).median();
+
+// 14. Add NDVI layers to the map
+Map.addLayer(ndvi_before_fire.clip(vegetation_area), {min: -1, max: 1, palette:['red', 'yellow', 'green']}, 'NDVI Before Fire', false);
+Map.addLayer(ndvi_after_fire.clip(vegetation_area), {min: -1, max: 1, palette:['red', 'yellow', 'green']}, 'NDVI After Fire', false);
+
+  
+// 15. Display histogram of NDVI before the fire
+print(ui.Chart.image.histogram(ndvi_before_fire, vegetation_area, 100)
+  .setOptions({
+    title: 'NDVI Before (2016-2017)',
+    colors: ['#FF0000'], // Set the color of the bars to red
+    hAxis: {title: 'NDVI Value', titleTextStyle: {color: '#333'}},
+    vAxis: {title: 'Frequency', titleTextStyle: {color: '#333'}},
+    legend: {position: 'none'}, // Remove the legend
+    bar: {groupWidth: '95%'} // Reduce bar width for better visibility
+  })
+);
+
+// 16. Display histogram of NDVI after the fire
+print(ui.Chart.image.histogram(ndvi_after_fire, vegetation_area, 100)
+  .setOptions({
+    title: 'NDVI After (2018-2019)',
+    colors: ['#ff7f0e'], // Set the color of the bars to orange
+    hAxis: {title: 'NDVI Value', titleTextStyle: {color: '#333'}},
+    vAxis: {title: 'Frequency', titleTextStyle: {color: '#333'}},
+    legend: {position: 'none'},
+    bar: {groupWidth: '95%'}
+  })
+);
+
+// 17. Calculate the change in NDVI
+var ndvi_change = ndvi_before_fire.subtract(ndvi_after_fire);
+
+// 18. Add NDVI change layer to the map
+Map.addLayer(ndvi_change.clip(vegetation_area), {palette:['green', 'red']}, 'NDVI Change', false);
+
+// 19. Apply a water mask to the NDVI change
+var water_mask = ee.ImageCollection("GOOGLE/DYNAMICWORLD/V1")
+  .select('label').mode().eq(0).not();
+Map.addLayer(water_mask.clip(vegetation_area), {palette:['blue', 'red']}, 'Water Mask', false);
+
+// 20. Mask the NDVI change with the water mask
+var ndvi_change_masked = ndvi_change.updateMask(water_mask).rename('ndvi_change_masked');
+
+// 21. Add masked NDVI change layer to the map
+Map.addLayer(ndvi_change_masked.clip(vegetation_area), {palette:['blue', 'green', 'yellow', 'red']}, 'NDVI Change Masked', false);
+
+// 22. Export the NDVI change image to Google Drive
+Export.image.toDrive({
+  image: ndvi_change_masked.clip(vegetation_area),
+  description: 'NDVI_Change_Masked',
+  scale: 100,
+  maxPixels: 1e13,
+  region: vegetation_area,
+  crs: 'EPSG:4326'
+});
+
+
+// 23. Display histogram of the masked NDVI change
+print(ui.Chart.image.histogram(ndvi_change_masked, vegetation_area, 1000)
+  .setOptions({
+    title: 'NDVI Change Masked',
+    colors: ['#2ca02c'], // Set the color of the bars to green
+    hAxis: {title: 'NDVI Change Value', titleTextStyle: {color: '#333'}},
+    vAxis: {title: 'Frequency', titleTextStyle: {color: '#333'}},
+    legend: {position: 'none'}, // Remove the legend
+    bar: {groupWidth: '95%'} // Adjust bar width
+  })
+);
+
+
+// 24. Create a threshold mask for areas with NDVI change greater than 0.1
+var ndvi_threshold = ndvi_change_masked.gt(0.1);
+var threshold_mask = ndvi_threshold.updateMask(ndvi_threshold);
+
+// 25. Add the threshold mask to the map
+Map.addLayer(threshold_mask.clip(vegetation_area), {palette:['red']}, 'NDVI Change > 0.1', false);
+
+// 26. Calculate the area of the change mask in square kilometers
+var area_in_km2 = threshold_mask.multiply(ee.Image.pixelArea().divide(1e6));
+var total_area = ee.Number(area_in_km2.reduceRegion({
+  reducer: ee.Reducer.sum(),
+  geometry: vegetation_area,
+  scale: 1000
+}).values().get(0));
+
+// 27. Print the total area of significant NDVI change
+print('Area of significant NDVI change (km²):', total_area);
