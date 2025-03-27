@@ -1,0 +1,73 @@
+
+/*
+YouTube: https://www.youtube.com/@amirhosseinahrarigee
+*/
+
+var geometry = /* color: #d63000 */ee.Geometry.Polygon(
+        [[[24.642705416629113, 65.0100999413585],
+          [24.568547701785363, 65.03155717873267],
+          [24.574040865847863, 65.00893959924295],
+          [24.628972506472863, 64.97468681838117],
+          [24.686650729129113, 64.95260245534051],
+          [24.738835787722863, 64.96771477777327],
+          [24.748448824832238, 64.94213507903228],
+          [24.840459322879113, 64.95434662034003],
+          [24.887151217410363, 64.98572216718536],
+          [24.872045016238488, 65.01822092464931],
+          [24.836339449832238, 65.01242047434695],
+          [24.821233248660363, 65.03155717873267],
+          [24.778661227175988, 65.03967163613927],
+          [24.876164889285363, 65.05647230413147],
+          [24.909123873660363, 65.03793303163856],
+          [24.991521334597863, 65.02807879841811],
+          [25.061559176394738, 65.03793303163856],
+          [25.060185885379113, 65.05299717250173],
+          [24.921483492800988, 65.06921057713537],
+          [24.884404635379113, 65.09119870670062],
+          [24.806127047488488, 65.09004188947914],
+          [24.634465670535363, 65.06950001255855],
+          [24.58434054846505, 65.04488676965526],
+          [24.6694845914338, 65.01952585230634],
+          [24.75565860266427, 65.03083255356236],
+          [24.764241671511925, 65.02851362075694],
+          [24.8013205289338, 65.0293832441774],
+          [24.80956027502755, 65.01445077529912],
+          [24.69042727942208, 64.99268951511198],
+          [24.652661776492394, 64.99965504718027],
+          [24.65403506750802, 65.01488581970398],
+          [24.57163760657052, 65.04039602123139]]]);
+Map.centerObject(geometry,9)
+
+var sen = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+.filterBounds(geometry)
+.filterDate('2017','2024')
+.filter(ee.Filter.calendarRange(6,9,'month'))
+.filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE',10))
+.map(function(img){
+  var bands = img.select('B.*').multiply(0.0001)
+  var ndvi = bands.normalizedDifference(['B8','B4']).rename('ndvi')
+  return ndvi
+  .copyProperties(img, ['system:time_start', 'system:time_end'])
+  });
+
+print(ui.Chart.image.series(sen, geometry, ee.Reducer.median(), 10, 'system:time_start').setChartType('ColumnChart'))
+  
+var before = sen.filterDate('2018','2019').median().rename('before')
+var after = sen.filterDate('2023', '2024').median().rename('after')
+
+Map.addLayer(before.clip(geometry),[],'before',false)
+Map.addLayer(after.clip(geometry),[],'after',false)
+
+print(ui.Chart.image.histogram(before, geometry, 10).setOptions({title: 'before'}))
+print(ui.Chart.image.histogram( after, geometry, 10).setOptions({title: 'after'}))
+
+
+var tree_area = sen.map(function(img){
+  var thr = img.gt(0.5);
+  var mask = thr.updateMask(thr);
+  var area = mask.multiply(ee.Image.pixelArea())
+  return area
+  .copyProperties(img, img.propertyNames())
+  });
+
+print(ui.Chart.image.series(tree_area, geometry, ee.Reducer.sum(),10, 'system:time_start').setChartType('ColumnChart'))
