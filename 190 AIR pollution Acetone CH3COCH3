@@ -1,0 +1,57 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com
+
+var geometry = /* color: #00ffff */ee.Geometry.Polygon(
+        [[[52.638584706389544, 27.453782528211374],
+          [52.652317616545794, 27.49246740369277],
+          [52.61798534115517, 27.511043498398845],
+          [52.61026057919228, 27.511652497594458],
+          [52.59893092831337, 27.51896022496425],
+          [52.59893092831337, 27.525658548506527],
+          [52.58519801815712, 27.53829291149225],
+          [52.58004817684853, 27.547425281441136],
+          [52.56700191220009, 27.55594814175376],
+          [52.55653056820595, 27.55868749209205],
+          [52.5398794146415, 27.55214337512924],
+          [52.53404292782509, 27.54772968069844],
+          [52.54125270565712, 27.53296534514836],
+          [52.550694081389544, 27.511043498398845],
+          [52.56305370053017, 27.491858298326044],
+          [52.57798824032509, 27.472974360838432],
+          [52.59790096005165, 27.475868077408638],
+          [52.593094441496966, 27.471451321593197],
+          [52.59790096005165, 27.467795941521743],
+          [52.60991725643837, 27.461246415701716],
+          [52.62502345761025, 27.45561046573981]]]);
+/*YOu CAN USE city boundary  ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+YOu CAN USE province boundary 
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+//YOu CAN USE country boundary 
+//var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+//Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,13)
+
+
+// Acetone (CH3C(O)CH3, MW = 58.08 g mol-1) volume mixing ratio dry air    ( micro Mol fraction *100)
+var airpollutionAcetone     = ee.ImageCollection("NASA/GEOS-CF/v1/rpl/tavg1hr").select('ACET').filterBounds(geometry).filterDate('2025-09-01','2025-11-09')
+var airpollutionAcetone     = airpollutionAcetone.map(function(img){                   //2018-01-01–2025-03-26
+
+  return img.clip(geometry).multiply(100000000).subtract(0).add(0).divide(1).copyProperties(img, ['system:time_start'])})
+print(airpollutionAcetone.size())  //( micro Mol fraction *100)
+Map.addLayer(airpollutionAcetone.mean(),{min:3.674298043598867,max:3.7677420516857295 ,palette:['4bff00','ffff00','ff0000']},'      airpollutionAcetone        ')
+Map.addLayer(airpollutionAcetone.mean(),{},'airpollutionAcetone gama')
+
+/// Create a time series chart showing airpollutionAcetone growth
+print(ui.Chart.image.series({
+  imageCollection: airpollutionAcetone    ,
+  region: geometry,
+  reducer: ee.Reducer.mean(),scale: 27750  ,xProperty: 'system:time_start'
+}).setSeriesNames(['airpollutionAcetone  Growth ']).setOptions({
+  title: 'airpollutionAcetone  Growth',
+  hAxis: {title: 'Year'},vAxis: {title: '(micro Mol fraction)'},interpolateNulls: true,lineWidth: 1,pointSize: 2,curveType: 'function'}));
