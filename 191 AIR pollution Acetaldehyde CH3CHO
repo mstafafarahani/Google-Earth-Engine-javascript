@@ -1,0 +1,45 @@
+//vedio & code in my channel YouTube.com/@Geemap     mstafa.farahani@gmail.com
+
+var geometry = /* color: #ffc82d */ee.Geometry.Polygon(
+        [[[51.635771996739834, 35.73322594306667],
+          [51.391326195958584, 35.7934003404428],
+          [51.11529470181796, 35.746601964779444],
+          [51.229277856114834, 35.685276749017035],
+          [51.374846703771084, 35.57588946714621],
+          [51.443511254552334, 35.57588946714621],
+          [51.50256276822421, 35.71650275609876]]]);
+/*YOu CAN USE city boundary  ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+YOu CAN USE province boundary 
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) //boundary province/state
+Map.addLayer(province)
+*/
+
+//YOu CAN USE country boundary 
+//var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+//Map.addLayer(country); // Add the country boundary to the map
+//Map.centerObject(geometry,13)
+
+
+// Acetaldehyde (CH3CHO, MW = 44.05 g mol-1) volume mixing ratio dry air    ( micro Mol fraction *100)
+var airpollutionAcetaldehyde     = ee.ImageCollection("NASA/GEOS-CF/v1/rpl/tavg1hr")
+.select('ALD2').filterBounds(geometry).filterDate('2024-09-01','2024-11-09')
+var airpollutionAcetaldehyde     = airpollutionAcetaldehyde.map(function(img){   //2018-01-01–2025-03-26
+
+  return img.clip(geometry).multiply(100000000).subtract(0).add(0).divide(1).copyProperties(img, ['system:time_start'])})
+print(airpollutionAcetaldehyde.size())  //( micro Mol fraction *100)
+Map.addLayer(airpollutionAcetaldehyde.mean(),{min:3.674298043598867,max:3.7677420516857295 
+,palette:['4bff00','ffff00','ff0000']},' airpollutionAcetaldehyde')
+Map.addLayer(airpollutionAcetaldehyde.mean(),{},'airpollutionAcetaldehyde gama')
+
+/// Create a time series chart showing airpollutionAcetaldehyde growth
+print(ui.Chart.image.series({
+  imageCollection: airpollutionAcetaldehyde    ,
+  region: geometry,
+  reducer: ee.Reducer.mean(),scale: 27750  ,xProperty: 'system:time_start'
+}).setSeriesNames(['airpollutionAcetaldehyde  Growth ']).setOptions({
+  title: 'airpollutionAcetaldehyde  Growth',
+  hAxis: {title: 'Year'},vAxis: {title: '(micro Mol fraction)'},interpolateNulls: true,lineWidth: 1,pointSize: 2,curveType: 'function'}));
