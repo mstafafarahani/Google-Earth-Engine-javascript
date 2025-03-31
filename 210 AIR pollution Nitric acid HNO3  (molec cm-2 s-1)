@@ -25,7 +25,7 @@ Map.centerObject(geometry,4)
 
 // Nitric_acid    ( 1)  I MULTIPLY IN 1 (1 ) TO AVOID TO GET ZERO VALUE IN CSV FILE
 var airpollutionNitric_acid      = ee.ImageCollection("NASA/GEOS-CF/v1/rpl/tavg1hr")
-.select('DRYDEPFLX_HCHO').filterBounds(country).filterDate('2024-11-01','2024-11-09')
+.select('DRYDEPFLX_HNO3').filterBounds(country).filterDate('2024-11-01','2024-11-09')
 var airpollutionNitric_acid      = airpollutionNitric_acid .map(function(img){   //2018-01-01–2025-03-26
 
   return img.clip(country).multiply(1).subtract(0).add(0).divide(1).copyProperties(img, ['system:time_start'])})
