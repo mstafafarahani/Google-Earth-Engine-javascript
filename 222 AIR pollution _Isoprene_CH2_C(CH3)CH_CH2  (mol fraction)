@@ -34,7 +34,7 @@ Map.centerObject(geometry,4)
 
 // _Isoprene    ( 1000,000,000)  I MULTIPLY IN  (1000,000,000 ) TO AVOID TO GET ZERO VALUE IN CSV FILE
 var airpollution_Isoprene      = ee.ImageCollection("NASA/GEOS-CF/v1/rpl/tavg1hr")
-.select('HNO4').filterBounds(country).filterDate('2024-11-01','2024-11-09')
+.select('ISOP').filterBounds(country).filterDate('2024-11-01','2024-11-09')
 var airpollution_Isoprene      = airpollution_Isoprene .map(function(img){   //2018-01-01–2025-03-26
   return img.clip(country).multiply(1000000000).subtract(0).add(0).divide(1).copyProperties(img, ['system:time_start'])})
 Map.addLayer(airpollution_Isoprene .mean(),{min: 0.032713303714990614 , max: 0.06468137875199317,
