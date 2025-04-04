@@ -1,0 +1,278 @@
+//vedio & code in my channel YouTube.com/@Geemap subscribe watch video to support me for upload more video     
+//mstafa.farahani@gmail.com    :) :) ;)
+
+
+    
+var geometry = 
+    /* color: #d63000 */
+    /* shown: false */
+    ee.Geometry.Point([13.125195312499986, 42.53480660045101]);
+
+/*YOu CAN USE city boundary  ,
+var city = ee.FeatureCollection("WM/geoLab/geoBoundaries/600/ADM2").filterBounds(geometry)
+Map.addLayer(city)
+Map.centerObject(geometry,8)
+
+YOu CAN USE province boundary 
+var provinceORstate = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1").filterBounds(geometry) 
+//boundary province/state
+Map.addLayer(province)
+*/
+
+//YOu CAN USE country boundary 
+var country = ee.FeatureCollection("FAO/GAUL/2015/level0").filterBounds(geometry);
+Map.addLayer(country); // Add the country boundary to the map
+Map.centerObject(geometry,4)
+
+
+
+
+
+
+
+// AIR POLLUTION    unit:	 molec cm-2 s-1	Coarse (0.5-8 microns) sea salt aerosol (MW = 31.40 g mol-1) dry deposition flux
+
+// Coarse_sea_salt_aerosol    ( 1)  I MULTIPLY IN 1 (1 ) TO AVOID TO GET ZERO VALUE IN CSV FILE
+var airpollutionCoarse_sea_salt_aerosol      = ee.ImageCollection("NASA/GEOS-CF/v1/rpl/tavg1hr")
+.select('DRYDEPFLX_SALC').filterBounds(country).filterDate('2024-11-01','2024-11-09')
+var airpollutionCoarse_sea_salt_aerosol      = airpollutionCoarse_sea_salt_aerosol .map(function(img){   //2018-01-01–2025-03-26
+  return img.clip(country).multiply(1).subtract(0).add(0).divide(1).copyProperties(img, ['system:time_start'])})
+Map.addLayer(airpollutionCoarse_sea_salt_aerosol .mean(),{min: 0.032713303714990614 , max: 0.06468137875199317,
+palette:['fffdb3', 'f7ff8a', 'ffe03b', 'f3e62a', 'ca3eeb', 'a429d5', 'f64dff']},'airpollutionCoarse_sea_salt_aerosol ')
+
+
+
+
+
+
+
+
+print(airpollutionCoarse_sea_salt_aerosol .size())
+
+
+
+
+
+
+
+
+
+
+/// Create a time series chart showing airpollutionCoarse_sea_salt_aerosol  growth
+print(ui.Chart.image.series({
+  imageCollection: airpollutionCoarse_sea_salt_aerosol     ,
+  region: country,
+  reducer: ee.Reducer.mean(),scale: 27750  ,
+  xProperty: 'system:time_start'
+}).setSeriesNames(['airpollutionCoarse_sea_salt_aerosol   Growth '])
+.setOptions({title: 'airpollutionCoarse_sea_salt_aerosol   Growth',
+  hAxis: {title: 'Year'},vAxis: {title: '(unit)'},
+  interpolateNulls: true,lineWidth: 1,pointSize: 2,
+  curveType: 'function'}));
+  
+
+
+
+
+
+// Bar Chart for Monthly Comparison )
+var monthlyChart = ui.Chart.image.seriesByRegion({
+  imageCollection: airpollutionCoarse_sea_salt_aerosol ,
+  regions: country,
+  reducer: ee.Reducer.mean(), 
+  scale: 27750,
+  xProperty: 'system:time_start' 
+}).setChartType('ColumnChart')
+/*  .setOptions({
+    title: 'Monthly Coarse_sea_salt_aerosol  Levels',
+    hAxis: {title: 'Date'},
+    vAxis: {title: '(micro Mol fraction)'},
+    legend: {position: 'none'},
+    colors: ['#ff7835'] 
+  });
+*/
+print(monthlyChart);
+
+  
+  // Scatter Chart
+var scatterChart = ui.Chart.image.series({
+  imageCollection: airpollutionCoarse_sea_salt_aerosol ,
+  region: country,
+  reducer: ee.Reducer.mean(),
+  scale: 27750,
+  xProperty: 'system:time_start'
+}).setChartType('ScatterChart')
+  .setOptions({
+    title: 'Scatter Plot of airpollutionCoarse_sea_salt_aerosol  Levels Over Time',
+    hAxis: {title: 'Date'},
+    vAxis: {title: '(unit)'},
+    pointSize: 5,
+    trendlines: {0: {color: 'blue', lineWidth: 2, opacity: 1}}
+  });
+print(scatterChart);
+
+
+
+
+
+
+// Area Chart for Coarse_sea_salt_aerosol  Levels Over Time
+var areaChart = ui.Chart.image.series({
+  imageCollection: airpollutionCoarse_sea_salt_aerosol ,
+  region: country,
+  reducer: ee.Reducer.mean(), 
+  scale: 27750,
+  xProperty: 'system:time_start' 
+}).setChartType('AreaChart')
+  .setOptions({
+    title: 'Area Chart of Coarse_sea_salt_aerosol  Levels Over Time',
+    hAxis: {title: 'Date'},
+    vAxis: {title: '(unit)'},
+    lineWidth: 2,  
+    pointSize: 5,  
+    colors: ['#ff7835'], 
+    legend: {position: 'none'} 
+  });
+print(areaChart);
+
+  
+ 
+
+
+
+
+
+
+var histogramChart = ui.Chart.image.histogram({
+  image: airpollutionCoarse_sea_salt_aerosol .mean(), 
+  region: country.geometry(), 
+  scale: 27750,
+  minBucketWidth: 0.01,
+  maxBuckets: 50
+}).setOptions({
+  title: 'Histogram of airpollutionCoarse_sea_salt_aerosol  Levels with Trend Line',
+  hAxis: {title: 'Coarse_sea_salt_aerosol  Concentration'},
+  vAxis: {title: 'Frequency'},
+  legend: {position: 'top-right'},
+  trendlines: {0: {color: 'red', lineWidth: 2, opacity: 1}}
+});
+print(histogramChart);
+
+
+
+
+
+
+
+// Export the image to Google Drive
+Export.image.toDrive({
+  image: airpollutionCoarse_sea_salt_aerosol .mean(),
+  description: 'airpollutionCoarse_sea_salt_aerosol ',
+  scale: 27750,
+  region: country.geometry().bounds(),
+  maxPixels: 1e13,
+  crs: airpollutionCoarse_sea_salt_aerosol .first().projection().crs(),
+  folder: 'test'
+});
+
+var videoArgs = {
+  dimensions: 720,
+  region: country.geometry().bounds(),
+  framesPerSecond: 2,
+  min: 0.032713303714990614,
+  max: 0.06468137875199317,
+  palette: ['fffdb3', 'f7ff8a', 'ffe03b', 'f3e62a', 'ca3eeb', 'a429d5', 'f64dff']
+};
+var videoArgs = {
+  dimensions: 720,
+  region: country.geometry().bounds(),
+  framesPerSecond: 2,
+  min: 0.032713303714990614,
+  max: 0.06468137875199317,
+  palette: ['fffdb3', 'f7ff8a', 'ffe03b', 'f3e62a', 'ca3eeb', 'a429d5', 'f64dff']
+};
+
+//  (visualize)
+var videoCollection = airpollutionCoarse_sea_salt_aerosol .map(function(img) {
+  return img.visualize({
+    min: videoArgs.min, 
+    max: videoArgs.max, 
+    palette: videoArgs.palette
+  });
+});
+//  Google Drive
+Export.video.toDrive({
+  collection: videoCollection,
+  description: 'airpollutionCoarse_sea_salt_aerosol n_Animation',
+  fileNamePrefix: 'airpollutionCoarse_sea_salt_aerosol _video',
+  framesPerSecond: videoArgs.framesPerSecond,
+  region: country.geometry().bounds(),
+  dimensions: videoArgs.dimensions,
+  crs: 'EPSG:4326',
+  maxPixels: 1e8
+});
+print('Video export initiated.');
+
+
+//---------------------------------------------------------
+// Create a panel to display the legend
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-right',  // Position the panel in the bottom-right corner
+    padding: '8px 13px'  // Add padding for better appearance
+  }
+});
+
+// Add a title to the legend
+var legendTitle = ui.Label({
+  value: 'airpollutionCoarse_sea_salt_aerosol ',  // Title text
+  style: {
+    fontWeight: 'bold',  // Make the font bold
+    fontSize: '18px',  // Set the font size
+    margin: '0 0 4px 0',  // Margin for spacing
+    padding: '0'  // No padding for the label
+  }
+});
+
+// Add the title to the legend panel
+legend.add(legendTitle);
+
+// Function to create a vertical color bar
+var makeColorBar = function(palette) {
+  var colorBar = ui.Thumbnail({
+    image: ee.Image.pixelLonLat().select(1),  // Use latitude as the image for the gradient
+    params: {
+      bbox: [0, 0, 0.1, 1],  // Create a vertical color bar
+      dimensions: '10x100',  // Set the size of the color bar (10 pixels wide and 100 pixels high)
+      format: 'png',  // Image format
+      min: 0,  // Minimum value for the color bar
+      max: 1,  // Maximum value for the color bar
+      palette: palette,  // Use the provided palette for colors
+    },
+    style: {stretch: 'vertical', margin: '8px 0'}  // Stretch the color bar vertically and add margin
+  });
+  return colorBar;  // Return the created color bar
+};
+
+// Define the magma color palette
+var palette = ['fffdb3', 'f7ff8a', 'ffe03b', 'f3e62a', 'ca3eeb', 'a429d5', 'f64dff'] // Colors for the magma palette
+
+// Create labels for the min and max values
+var minLabel = ui.Label({
+  value: 'high',  // Label for the maximum value
+  style: {margin: '4px 8px'}  // Add margin for better appearance
+});
+var maxLabel = ui.Label({
+  value: 'low',  // Label for the minimum value
+  style: {margin: '4px 8px'}  // Add margin for better appearance
+});
+
+// Add the min label, color bar, and max label to the legend panel in a vertical layout
+legend.add(minLabel);  // Add the min label at the top
+legend.add(makeColorBar(palette));  // Add the color bar in the middle
+legend.add(maxLabel);  // Add the max label at the bottom
+
+// Add the legend panel to the map
+Map.add(legend);
+
+
